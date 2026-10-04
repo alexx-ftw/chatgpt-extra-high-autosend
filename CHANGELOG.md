@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2 - 2026-10-04
+
+- Añade `@updateURL`, `@downloadURL`, `@homepageURL` y `@supportURL` públicos.
+- Incluye metadatos mínimos para comprobar actualizaciones y un generador de distribuciones.
+- Usa namespace y helper de diagnóstico genéricos.
+- Documenta la reinstalación inicial y la configuración del actualizador del gestor.
+- Añade pruebas de metadatos y conservación de la lógica de autoenvío.
+
 ## 1.3.1 - 2026-10-04
 
 Primera versión incorporada a este repositorio, sin modificar el userscript entregado previamente como TXT.
