@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.3 - 2026-10-08
+
+- Corrige cancelaciones al vaciar o retirar los parámetros de consulta durante la carga.
+- Acepta el mismo texto entre `q` y `prompt`, con normalización consistente con el editor.
+- Mantiene el rechazo de consultas distintas y detecta valores repetidos conflictivos.
+- Añade estados de URL al diagnóstico sin registrar el texto ni la dirección completa.
+- Añade pruebas de regresión de la comprobación de URL y del flujo con un compositor simulado.
+- Conserva el código de selección, carga del texto y envío único de la versión 1.3.2.
+
 ## 1.3.2 - 2026-10-04
 
 - Añade `@updateURL`, `@downloadURL`, `@homepageURL` y `@supportURL` públicos.

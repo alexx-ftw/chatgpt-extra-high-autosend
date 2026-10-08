@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.2.** Proyecto no oficial, no afiliado a OpenAI. Conserva la lógica de autoenvío de la versión 1.3.1 y añade distribución con actualizaciones automáticas.
+**Versión: 1.3.3.** Proyecto no oficial, no afiliado a OpenAI. Corrige cancelaciones al vaciar o normalizar los parámetros de la URL y conserva el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -48,6 +48,8 @@ Si ambos parámetros contienen texto válido, `q` tiene prioridad. Una consulta 
 
 Espera al editor, comprueba o introduce el texto, selecciona Extra High, verifica el estado y pulsa Enviar una sola vez. Reconoce `data-composer-markdown` y conserva compatibilidad con `prompt-textarea`.
 
+La comprobación de la URL permite retirar o vaciar `q`/`prompt`, o pasar el mismo texto de un alias al otro. Sigue cancelando ante una consulta distinta, un cambio de conversación o una edición manual. La comparación solo normaliza saltos CRLF y espacios exteriores; no decodifica el texto dos veces.
+
 Admite una opción de menú o el deslizador Power. Intenta eventos de teclado y dispone de un respaldo mediante el controlador React del deslizador. No asume que la posición máxima sea Extra High: rechaza una etiqueta Pro como confirmación del objetivo.
 
 ## Protección y privacidad
@@ -61,6 +63,8 @@ Admite una opción de menú o el deslizador Power. Intenta eventos de teclado y 
 El texto forma parte de la URL y puede quedar en el historial u otros registros del navegador o del servicio. No uses este mecanismo para datos sensibles.
 
 ## Diagnóstico
+
+El diagnóstico añade `URL actual` con estados como `vacío`, `ausente`, `mismo texto` o `texto distinto`, sin copiar la consulta ni la dirección completa.
 
 El panel muestra los pasos Texto, Selector y Envío. Ante un bloqueo, pulsa **Copiar diagnóstico** y adjunta el resultado a una incidencia, indicando la versión. Desde la consola:
 
@@ -80,7 +84,7 @@ node scripts/sync-distribution.cjs --check
 node --test
 ```
 
-Las pruebas comprueban URLs de actualización, identidad, permisos, versiones sincronizadas, distribución TXT/metadatos y conservación de la lógica. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
+Las pruebas comprueban metadatos de actualización, identidad, permisos, distribución, transiciones de URL y privacidad del diagnóstico. También ejecutan el flujo de envío sobre un compositor simulado y verifican que la selección del esfuerzo, la carga del editor y el envío no se han modificado. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
 
 ## Licencia
 

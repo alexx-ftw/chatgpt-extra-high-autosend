@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.2
+// @version      1.3.3
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.2';
+  const VERSION = '1.3.3';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -140,6 +140,7 @@
       'Paso: ' + phase,
       'Otra ejecución previa: ' + Boolean(previousRun),
       'Parámetro: ' + QUERY_KEYS.filter(key => url.searchParams.has(key)).join(', '),
+      'URL actual: ' + queryStatus().summary,
       'Editor detectado: ' + Boolean(input),
       'Coincidencias del editor en DOM: ' + document.querySelectorAll(EDITOR).length,
       'Tipo de editor: ' + (input ? (input.tagName.toLowerCase() +
@@ -240,17 +241,44 @@
     window.removeEventListener('popstate', onNavigate);
   }
 
+  // La URL puede consumirse dejando q vacío o pasando el mismo texto a prompt.
+  // Comparar el contenido, no la presencia de cada alias. Nunca volver a
+  // decodificar: un '+' o un '%20' literal puede formar parte del mensaje.
+  function queryStatus() {
+    const currentUrl = new URL(location.href);
+    const expected = normalize(prompt);
+    const entries = QUERY_KEYS.map(key => ({
+      key,
+      values: currentUrl.searchParams.getAll(key).map(normalize),
+      initial: url.searchParams.getAll(key).map(normalize)
+    }));
+    // Misma prioridad q > prompt que al iniciar. Un alias secundario antiguo
+    // no puede convertirse ahora en la consulta principal de este autoenvío.
+    const active = entries.map(entry => entry.values[0])
+      .find(value => value && value !== '%s');
+    const conflict = Boolean(active && active !== expected) || entries.some(entry =>
+      entry.values.some((value, index) => value && value !== expected &&
+        value !== entry.initial[index]));
+    // Solo estados categóricos. No incluir el texto ni la URL en el registro.
+    const summary = entries.map(entry => {
+      const states = entry.values.map((value, index) => {
+        if (!value) return 'vacío';
+        if (value === expected) return 'mismo texto';
+        if (value === entry.initial[index]) return 'valor inicial secundario';
+        return 'texto distinto';
+      });
+      return entry.key + '=' + (states.length ? states.join(', ') : 'ausente');
+    }).join('; ');
+    return { conflict, summary };
+  }
+
   function guard() {
     if (cancelled) throw new Error(cancelled);
     if (location.pathname !== '/') throw new Error('La dirección ha cambiado.');
-    const currentUrl = new URL(location.href);
-    for (const key of QUERY_KEYS) {
-      const value = currentUrl.searchParams.get(key);
-      // Permite que la aplicación retire los parámetros tras leerlos,
-      // pero no que este autoenvío se aplique a otra consulta distinta.
-      if (value !== null && value !== url.searchParams.get(key)) {
-        throw new Error('La consulta de la dirección ha cambiado.');
-      }
+    const query = queryStatus();
+    if (query.conflict) {
+      record('Consulta diferente: ' + query.summary);
+      throw new Error('La consulta de la dirección ha cambiado.');
     }
     if (document.querySelector(ACTIVITY)) {
       throw new Error('Ya hay una conversación o un envío en curso.');

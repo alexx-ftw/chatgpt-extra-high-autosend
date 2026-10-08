@@ -54,10 +54,11 @@ test('diagnostic helper uses the generic project name', () => {
 });
 
 
-test('auto-send runtime is unchanged from v1.3.1 except the displayed version', () => {
+test('selection, editor filling and single-send runtime remain unchanged from v1.3.2', () => {
   const { execFileSync } = require('node:child_process');
-  const previous = execFileSync('git', ['show', 'v1.3.1:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
-  const body = text => text.split('// ==/UserScript==')[1]
-    .replace(/const VERSION = '[^']+';/, "const VERSION = 'VERSION';");
-  assert.equal(body(source), body(previous));
+  const previous = execFileSync('git', ['show', 'v1.3.2:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
+  const workflow = text => text.slice(text.indexOf('  function menuScopes()'),
+    text.indexOf('  // Expuesto localmente'));
+  assert.ok(workflow(source).length > 10000);
+  assert.equal(workflow(source), workflow(previous));
 });
