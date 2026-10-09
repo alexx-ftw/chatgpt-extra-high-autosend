@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.3.** Proyecto no oficial, no afiliado a OpenAI. Corrige cancelaciones al vaciar o normalizar los parámetros de la URL y conserva el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.4.** Proyecto no oficial, no afiliado a OpenAI. El panel desaparece al confirmar el envío. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -64,6 +64,8 @@ El texto forma parte de la URL y puede quedar en el historial u otros registros 
 
 ## Diagnóstico
 
+El panel se elimina inmediatamente cuando la interfaz muestra el inicio del mensaje, sin esperar a que termine la respuesta. Mientras el envío está pendiente permanece visible; si falla o no se confirma, conserva el aviso y el botón para copiar el diagnóstico. El registro sigue disponible desde la consola después de ocultar el panel.
+
 El diagnóstico añade `URL actual` con estados como `vacío`, `ausente`, `mismo texto` o `texto distinto`, sin copiar la consulta ni la dirección completa.
 
 El panel muestra los pasos Texto, Selector y Envío. Ante un bloqueo, pulsa **Copiar diagnóstico** y adjunta el resultado a una incidencia, indicando la versión. Desde la consola:
@@ -84,7 +86,7 @@ node scripts/sync-distribution.cjs --check
 node --test
 ```
 
-Las pruebas comprueban metadatos de actualización, identidad, permisos, distribución, transiciones de URL y privacidad del diagnóstico. También ejecutan el flujo de envío sobre un compositor simulado y verifican que la selección del esfuerzo, la carga del editor y el envío no se han modificado. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
+Las pruebas comprueban metadatos de actualización, identidad, permisos, distribución, transiciones de URL y privacidad del diagnóstico. También ejecutan el flujo de envío sobre un compositor simulado y verifican que la selección del esfuerzo, la carga del editor y el envío no se han modificado. Comprueban la retirada inmediata del panel tras confirmar el envío y su conservación en caso de error. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
 
 ## Licencia
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.3
+// @version      1.3.4
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.3';
+  const VERSION = '1.3.4';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -738,7 +738,8 @@
     while (Date.now() < until) {
       if (document.querySelector(ACTIVITY)) {
         phase = 'Envío observado';
-        notify('La interfaz ha iniciado el mensaje con Extra High seleccionado.', false, 8_000);
+        record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');
+        document.getElementById(STATUS_ID)?.remove();
         return;
       }
       await sleep(200);

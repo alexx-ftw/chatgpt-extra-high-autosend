@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.4 - 2026-10-09
+
+- Elimina el panel inmediatamente al observar el inicio del mensaje, sin mostrar un aviso de éxito durante ocho segundos.
+- Conserva el panel mientras se espera confirmación y ante errores; mantiene el registro de diagnóstico local.
+- Añade pruebas de confirmación inmediata, confirmación tardía, falta de confirmación y panel ya retirado.
+- Mantiene el ajuste de esfuerzo, la carga del texto, las protecciones de URL y el envío único.
+
 ## 1.3.3 - 2026-10-08
 
 - Corrige cancelaciones al vaciar o retirar los parámetros de consulta durante la carga.

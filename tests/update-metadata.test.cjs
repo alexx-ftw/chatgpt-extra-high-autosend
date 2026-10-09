@@ -54,11 +54,14 @@ test('diagnostic helper uses the generic project name', () => {
 });
 
 
-test('selection, editor filling and single-send runtime remain unchanged from v1.3.2', () => {
+test('runtime is unchanged from v1.3.3 except successful panel dismissal', () => {
   const { execFileSync } = require('node:child_process');
-  const previous = execFileSync('git', ['show', 'v1.3.2:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
+  const previous = execFileSync('git', ['show', 'v1.3.3:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
   const workflow = text => text.slice(text.indexOf('  function menuScopes()'),
     text.indexOf('  // Expuesto localmente'));
   assert.ok(workflow(source).length > 10000);
-  assert.equal(workflow(source), workflow(previous));
+  const previousSuccess = "        notify('La interfaz ha iniciado el mensaje con Extra High seleccionado.', false, 8_000);";
+  const currentSuccess = "        record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');\n        document.getElementById(STATUS_ID)?.remove();";
+  assert.ok(workflow(previous).includes(previousSuccess));
+  assert.equal(workflow(source), workflow(previous).replace(previousSuccess, currentSuccess));
 });
