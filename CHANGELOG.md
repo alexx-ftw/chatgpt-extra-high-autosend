@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.6 - 2026-10-09
+
+- Acelera las esperas mediante cambios DOM y eventos, con temporizador de respaldo.
+- Reduce pausas fijas y evita reabrir un selector que ya indica Extra High.
+- Conserva los timeouts máximos, las protecciones y el panel solo para alertas.
+- Registra el tiempo de preparación en el diagnóstico local.
+- Incluye benchmark reproducible y pruebas de velocidad, estados lentos y limpieza de recursos.
+
 ## 1.3.5 - 2026-10-09
 
 - Muestra el panel solo ante errores, fallos o advertencias.

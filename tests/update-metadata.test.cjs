@@ -54,15 +54,17 @@ test('diagnostic helper uses the generic project name', () => {
 });
 
 
-test('runtime is unchanged from v1.3.4 except alert-only panel rendering', () => {
+test('text, effort, URL, cancellation and single-send guards are unchanged from v1.3.5', () => {
   const { execFileSync } = require('node:child_process');
-  const previous = execFileSync('git', ['show', 'v1.3.4:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
-  const body = text => text.split('// ==/UserScript==')[1]
-    .replace(/const VERSION = '[^']+';/, "const VERSION = 'VERSION';");
-  const previousGate = '    record(message);\n    if (!document.body) return;';
-  const currentGate = '    record(message);\n' +
-    '    // Solo alertas (errores, fallos o advertencias); el progreso queda en el registro.\n' +
-    '    if (!error || !document.body) return;';
-  assert.ok(body(previous).includes(previousGate));
-  assert.equal(body(source), body(previous).replace(previousGate, currentGate));
+  const previous = execFileSync('git', ['show', 'v1.3.5:chatgpt-extra-high.user.js'], { cwd: root, encoding: 'utf8' });
+  const extract = (text, name) => {
+    const start = text.indexOf('  function ' + name + '(');
+    const end = text.indexOf('\n  }\n', start);
+    assert.ok(start >= 0 && end > start, 'Missing function: ' + name);
+    return text.slice(start, end + 5);
+  };
+  for (const name of ['matchesPrompt', 'isExtraHigh', 'queryStatus', 'guard',
+      'consumeQuery', 'sliderReactProps', 'notify', 'onInteraction']) {
+    assert.equal(extract(source, name), extract(previous, name), name + ' must preserve its protections');
+  }
 });

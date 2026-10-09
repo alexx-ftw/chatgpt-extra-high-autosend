@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.5.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.6.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -52,6 +52,10 @@ La comprobación de la URL permite retirar o vaciar `q`/`prompt`, o pasar el mis
 
 Admite una opción de menú o el deslizador Power. Intenta eventos de teclado y dispone de un respaldo mediante el controlador React del deslizador. No asume que la posición máxima sea Extra High: rechaza una etiqueta Pro como confirmación del objetivo.
 
+## Rendimiento
+
+Preparación acelerada mediante esperas por eventos y pausas de estabilidad más cortas. Consulta la [comparación reproducible y sus límites](./PERFORMANCE.md). Para ejecutar el benchmark: `node scripts/benchmark.cjs`.
+
 ## Protección y privacidad
 
 - Abrir una URL `/?q=...` o `/?prompt=...` con el script activo puede enviar ese texto desde tu cuenta. No abras consultas de fuentes no fiables.
@@ -86,7 +90,7 @@ node scripts/sync-distribution.cjs --check
 node --test
 ```
 
-Las pruebas comprueban metadatos de actualización, identidad, permisos, distribución, transiciones de URL y privacidad del diagnóstico. También ejecutan el flujo de envío sobre un compositor simulado y verifican que la selección del esfuerzo, la carga del editor y el envío no se han modificado. Ejecutan la función real de notificación sobre un DOM simulado y comprueban que el proceso normal no crea el panel ni momentáneamente, que las alertas siguen visibles y que el botón de diagnóstico funciona. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
+Las pruebas comprueban metadatos de actualización, identidad, permisos, distribución, transiciones de URL y privacidad del diagnóstico. También ejecutan el flujo de envío sobre un compositor simulado y verifican las protecciones de texto, esfuerzo y envío único, además de las esperas, rutas de respaldo y liberación de recursos. Ejecutan la función real de notificación sobre un DOM simulado y comprueban que el proceso normal no crea el panel ni momentáneamente, que las alertas siguen visibles y que el botón de diagnóstico funciona. No son pruebas de integración con una sesión real. El funcionamiento depende del HTML, de los controles de la cuenta y de detalles internos de React. No se incluyen capturas privadas ni conversaciones.
 
 ## Licencia
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.5
+// @version      1.3.6
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.5';
+  const VERSION = '1.3.6';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -37,10 +37,13 @@
 
   const TIMEOUT_MS = 90_000;
   const MENU_TIMEOUT_MS = 8_000;
-  const POLL_MS = 100;
+  const POLL_MS = 100; // Respaldo para cambios sin eventos DOM.
+  const READY_STABLE_MS = 60;
+  const SEND_STABLE_MS = 80;
   const TARGET_EFFORT = 'max'; // «Extra High» en el HTML facilitado.
   const STATUS_ID = 'cgpt-q-extra-high-v131-status';
-  const deadline = Date.now() + TIMEOUT_MS;
+  const startedAt = Date.now();
+  const deadline = startedAt + TIMEOUT_MS;
   // El editor del HTML aportado NO tiene id="prompt-textarea".
   // Usar su atributo propio evita confundirlo con buscadores u otros editores.
   // Se mantienen los dos selectores antiguos por compatibilidad.
@@ -286,21 +289,67 @@
     }
   }
 
-  async function waitFor(read, message, timeout = TIMEOUT_MS, stableMs = 0) {
-    const until = Math.min(deadline, Date.now() + timeout);
-    let previous = null;
-    let since = 0;
-    while (Date.now() < until) {
-      guard();
+  // Despertar al cambiar la interfaz, sin aumentar la frecuencia del sondeo.
+  // El observador, el temporizador y los listeners viven solo durante esta espera.
+  function waitForChange(ms) {
+    if (typeof MutationObserver !== 'function') return sleep(ms);
+    return new Promise(resolve => {
+      let observer = null, timer = null, settled = false;
+      const documentEvents = ['input', 'change', 'readystatechange', 'keydown', 'beforeinput'];
+      const windowEvents = ['popstate', 'pagehide'];
+      const wake = () => {
+        if (settled) return;
+        settled = true;
+        observer?.disconnect();
+        clearTimeout(timer);
+        for (const type of documentEvents) document.removeEventListener(type, wake, true);
+        for (const type of windowEvents) window.removeEventListener(type, wake, true);
+        resolve();
+      };
+      try {
+        observer = new MutationObserver(wake);
+        observer.observe(document, {
+          childList: true, subtree: true, characterData: true, attributes: true,
+          attributeFilter: ['class', 'style', 'hidden', 'inert', 'disabled',
+            'contenteditable', 'aria-disabled', 'aria-hidden', 'aria-expanded',
+            'aria-valuenow', 'aria-valuetext', 'data-state', 'data-disabled',
+            'data-selected-reasoning-effort']
+        });
+      } catch {
+        observer?.disconnect();
+        observer = null;
+      }
+      for (const type of documentEvents) document.addEventListener(type, wake, true);
+      for (const type of windowEvents) window.addEventListener(type, wake, true);
+      timer = setTimeout(wake, ms);
+    });
+  }
+
+  // Devuelve null si vence el plazo. Conserva los timeouts para conexiones lentas.
+  async function waitForValue(read, timeout = TIMEOUT_MS, stableMs = 0, checkGuard = true) {
+    const until = Math.min(checkGuard ? deadline : Infinity, Date.now() + timeout);
+    let previous = null, since = 0;
+    while (Date.now() <= until) {
+      if (checkGuard) guard();
       const value = read();
+      const now = Date.now();
       if (value) {
-        if (value !== previous) { previous = value; since = Date.now(); }
-        if (Date.now() - since >= stableMs) return value;
+        if (value !== previous) { previous = value; since = now; }
+        if (now - since >= stableMs) return value;
       } else {
         previous = null;
       }
-      await sleep(POLL_MS);
+      const remaining = until - now;
+      if (remaining <= 0) break;
+      const settleIn = previous ? Math.max(1, stableMs - (now - since)) : POLL_MS;
+      await waitForChange(Math.min(POLL_MS, remaining, settleIn));
     }
+    return null;
+  }
+
+  async function waitFor(read, message, timeout = TIMEOUT_MS, stableMs = 0) {
+    const value = await waitForValue(read, timeout, stableMs);
+    if (value) return value;
     throw new Error(message);
   }
 
@@ -406,11 +455,12 @@
       const state = readPower();
       if (state && state.key !== previous.key) {
         if (last !== state.key) { last = state.key; since = Date.now(); }
-        if (Date.now() - since >= 250) return state;
+        if (Date.now() - since >= READY_STABLE_MS) return state;
       } else {
         last = '';
       }
-      await sleep(POLL_MS);
+      await waitForChange(Math.min(POLL_MS, Math.max(1, until - Date.now()),
+        last ? Math.max(1, READY_STABLE_MS - (Date.now() - since)) : POLL_MS));
     }
     return null;
   }
@@ -532,7 +582,7 @@
       while (Date.now() < until) {
         guard();
         if (opened() || findPowerSlider() || findExtraHighOption()) return;
-        await sleep(POLL_MS);
+        await waitForChange(Math.min(POLL_MS, Math.max(1, until - Date.now())));
       }
     }
     throw new Error('E21: Detecto el selector, pero no se abre. Usa «Copiar diagnóstico».');
@@ -544,14 +594,14 @@
     const scope = menuScopes()[0];
     const focused = scope?.contains(document.activeElement) ? document.activeElement : scope || trigger;
     pressKey(focused, 'Escape');
-    await sleep(150);
+    await waitForValue(() => effort()?.getAttribute('aria-expanded') !== 'true', 150, 0, false);
     trigger = effort() || trigger;
     if (trigger.getAttribute('aria-expanded') === 'true') {
       trigger.click();
-      await sleep(150);
+      await waitForValue(() => effort()?.getAttribute('aria-expanded') !== 'true', 150, 0, false);
       if (trigger.getAttribute('aria-expanded') === 'true') {
         pointerClick(trigger);
-        await sleep(150);
+        await waitForValue(() => effort()?.getAttribute('aria-expanded') !== 'true', 150, 0, false);
       }
     }
     if (trigger.getAttribute('aria-expanded') === 'true') {
@@ -560,10 +610,12 @@
   }
 
   async function selectExtraHigh() {
+    // No abrir de nuevo un selector ya confirmado y cerrado.
+    if (isExtraHigh() && effort()?.getAttribute('aria-expanded') !== 'true') return;
     let trigger = await waitFor(() => {
       const node = effort();
       return node && !node.matches(':disabled') && node.getAttribute('aria-disabled') !== 'true' && node;
-    }, 'No aparece el selector de Thinking effort.', TIMEOUT_MS, 300);
+    }, 'No aparece el selector de Thinking effort.', TIMEOUT_MS, READY_STABLE_MS);
     try {
       const openState = readPower();
       if (isExtraHigh() && (!openState || powerIsTarget(openState))) return;
@@ -575,11 +627,11 @@
       } else {
         control.focus({ preventScroll: true });
         control.click();
-        await sleep(500);
+        await waitForValue(isExtraHigh, 500, READY_STABLE_MS);
         if (!isExtraHigh() && control.isConnected) {
           record('Opción clásica: respaldo Enter.');
           pressKey(control, 'Enter');
-          await sleep(300);
+          await waitForValue(isExtraHigh, 300, READY_STABLE_MS);
         }
       }
     } finally {
@@ -587,7 +639,7 @@
       // el estado definitivo del botón, fuera del menú modal de Radix.
       await closeEffortMenu(effort() || trigger);
     }
-    await waitFor(isExtraHigh, 'El botón no confirma Extra High después de cerrar Power.', MENU_TIMEOUT_MS, 400);
+    await waitFor(isExtraHigh, 'El botón no confirma Extra High después de cerrar Power.', MENU_TIMEOUT_MS, READY_STABLE_MS);
   }
 
   async function fillPrompt(node) {
@@ -623,8 +675,9 @@
       writing = false;
     }
 
-    // Dejar que los manejadores de pegado actualicen el estado del editor.
-    await sleep(350);
+    // El pegado suele actualizarse sincrónicamente. Solo esperar si sigue vacío.
+    if (matchesPrompt(node)) return;
+    await waitForValue(() => node !== editor() || matchesPrompt(node), 350);
     guard();
     if (node !== editor()) return; // React ha sustituido el editor: releerlo.
     if (matchesPrompt(node)) return;
@@ -654,7 +707,7 @@
 
   async function ensurePrompt() {
     const until = Math.min(deadline, Date.now() + 12_000);
-    const nativeUntil = Date.now() + 1_500;
+    const nativeUntil = Date.now() + 250;
     let attempts = 0;
     let nextAttempt = nativeUntil;
     let stableNode = null;
@@ -665,20 +718,24 @@
       if (enabled(node)) {
         if (matchesPrompt(node)) {
           if (node !== stableNode) { stableNode = node; stableSince = Date.now(); }
-          if (Date.now() - stableSince >= 400) return node;
+          if (Date.now() - stableSince >= READY_STABLE_MS) return node;
         } else {
           stableNode = null;
           if (normalize(textOf(node))) throw new Error('Hay un borrador distinto. Lo he conservado.');
           if (Date.now() >= nextAttempt && attempts < 3) {
             attempts++;
             await fillPrompt(node);
-            nextAttempt = Date.now() + 1_000;
+            nextAttempt = Date.now() + 250;
+            continue; // Releer el resultado sin dormir tras un pegado correcto.
           }
         }
       } else {
         stableNode = null;
       }
-      await sleep(POLL_MS);
+      const now = Date.now();
+      const settleIn = stableNode ? Math.max(1, READY_STABLE_MS - (now - stableSince)) :
+        (enabled(node) && attempts < 3 && nextAttempt > now ? nextAttempt - now : POLL_MS);
+      await waitForChange(Math.min(POLL_MS, Math.max(1, until - now), settleIn));
     }
     throw new Error('El texto no quedó cargado. El editor sigue libre para que escribas o pegues manualmente.');
   }
@@ -696,7 +753,7 @@
     await waitFor(() => document.readyState !== 'loading' &&
       ((enabled(editor()) && editor()) ||
        (effort()?.getAttribute('aria-expanded') === 'true' && menuScopes()[0])),
-      'No encuentro el editor. Comprueba que has iniciado sesión.', TIMEOUT_MS, 400);
+      'No encuentro el editor. Comprueba que has iniciado sesión.', TIMEOUT_MS, READY_STABLE_MS);
     // Un menú previamente abierto puede ocultar el editor con aria-hidden.
     await closeEffortMenu(effort());
 
@@ -718,7 +775,7 @@
       if (!current || !matchesPrompt(current) || !isExtraHigh()) return null;
       const root = current.closest('form') || document;
       return [...root.querySelectorAll(SEND)].find(enabled);
-    }, 'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.', TIMEOUT_MS, 400);
+    }, 'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.', TIMEOUT_MS, SEND_STABLE_MS);
 
     guard();
     if (!isExtraHigh() || !matchesPrompt(editor()) || !enabled(button)) {
@@ -732,18 +789,16 @@
     }
     finished = true;
     cleanup();
-    record('Único clic en Enviar; selector=' + effortLabel(effort()));
+    record('Único clic en Enviar; selector=' + effortLabel(effort()) +
+      '; preparación=' + (Date.now() - startedAt) + ' ms');
     button.click();
     notify('Paso 3/3 · Se ha pulsado Enviar. Comprobando respuesta de la página…');
-    const until = Date.now() + 12_000;
-    while (Date.now() < until) {
-      if (document.querySelector(ACTIVITY)) {
-        phase = 'Envío observado';
-        record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');
-        document.getElementById(STATUS_ID)?.remove();
-        return;
-      }
-      await sleep(200);
+    const observed = await waitForValue(() => document.querySelector(ACTIVITY), 12_000, 0, false);
+    if (observed) {
+      phase = 'Envío observado';
+      record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');
+      document.getElementById(STATUS_ID)?.remove();
+      return;
     }
     phase = 'Envío sin confirmar';
     notify('E31: Se pulsó Enviar, pero no detecto el inicio del mensaje.\nNo reintento para evitar duplicados. Usa «Copiar diagnóstico».', true);
