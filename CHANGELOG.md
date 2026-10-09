@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.5 - 2026-10-09
+
+- Muestra el panel solo ante errores, fallos o advertencias.
+- Mantiene silenciosos el progreso, la espera de confirmación y el envío correcto, sin crear el panel ni momentáneamente.
+- Conserva el registro local completo y el botón de diagnóstico en las alertas.
+- Añade pruebas con la función real de notificación sobre un DOM simulado, incluida la copia del diagnóstico.
+- No cambia la selección de Extra High, el control de URL ni el envío único.
+
 ## 1.3.4 - 2026-10-09
 
 - Elimina el panel inmediatamente al observar el inicio del mensaje, sin mostrar un aviso de éxito durante ocho segundos.

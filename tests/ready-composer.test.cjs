@@ -14,9 +14,32 @@ function readyComposer(nextUrl, options = {}) {
   const location = new URL('https://chatgpt.com/?q=Test%20prompt');
   let now = 0, changed = false, sends = 0;
   let sentAt = null, confirmedAt = null, removedAt = null;
-  let panelVisible = false, removals = 0;
-  const pendingPanels = [];
-  const statusPanel = { remove() { panelVisible = false; removals++; removedAt = now; } };
+  let panelVisible = false, removals = 0, createdPanels = 0;
+  let statusPanel = null;
+  const pendingPanels = [], statuses = [], clipboard = [];
+  // DOM doubles only: the real notify() creates, updates and removes this UI.
+  function uiNode(tag) {
+    const attrs = {}, children = [], listeners = {};
+    let text = '';
+    return {
+      tagName: tag.toUpperCase(), style: {}, children, listeners,
+      setAttribute(key, value) { attrs[key] = value; },
+      getAttribute(key) { return attrs[key] ?? null; },
+      append(...nodes) { children.push(...nodes); },
+      addEventListener(type, callback) { listeners[type] = callback; },
+      querySelector(selector) {
+        return children.find(child => selector === '[data-autosend-message]'
+          ? child.getAttribute('data-autosend-message') !== null
+          : child.tagName === selector.toUpperCase()) || null;
+      },
+      get textContent() { return text; },
+      set textContent(value) {
+        text = value;
+        if (Object.hasOwn(attrs, 'data-autosend-message')) statuses.push(value);
+      },
+      remove() { panelVisible = false; removals++; removedAt = now; }
+    };
+  }
   class ClockDate extends Date { static now() { return now; } }
   const node = attrs => ({
     isConnected: true,
@@ -37,7 +60,11 @@ function readyComposer(nextUrl, options = {}) {
   const form = { querySelectorAll: () => [send] };
   input.closest = selector => selector === 'form' ? form : null;
   const document = {
-    body: {}, readyState: 'complete',
+    body: { append(panel) {
+      statusPanel = panel; panelVisible = true; createdPanels++;
+    } },
+    createElement: uiNode,
+    readyState: 'complete',
     addEventListener() {}, removeEventListener() {},
     getElementById: id => id === 'cgpt-q-extra-high-v131-status' && panelVisible ? statusPanel : null,
     querySelector: selector => {
@@ -62,10 +89,9 @@ function readyComposer(nextUrl, options = {}) {
   const history = { state: null, replaceState: (_state, _title, value) => {
     location.href = new URL(value, location).href;
   } };
-  const statuses = [];
   const context = vm.createContext({
     URL, document, location, window, history, statuses, console,
-    captureStatus(message) { panelVisible = true; statuses.push(message); },
+    navigator: { clipboard: { async writeText(text) { clipboard.push(text); } } },
     Date: ClockDate, HTMLTextAreaElement: class {},
     getComputedStyle: () => ({ visibility: 'visible' }),
     setTimeout(callback, delay) {
@@ -78,11 +104,13 @@ function readyComposer(nextUrl, options = {}) {
     }
   });
   vm.runInContext(source.slice(0, seam) +
-    '\n  notify = globalThis.captureStatus;\n  globalThis.run = main;\n' +
+    '\n  globalThis.sendNotice = notify;\n  globalThis.run = main;\n' +
     '  globalThis.getPhase = () => phase;\n  globalThis.report = diagnostic;\n})();', context);
   return {
     run: context.run, statuses, location, input, send, trigger, pendingPanels,
-    diagnostic: context.report,
+    diagnostic: context.report, notify: context.sendNotice, clipboard,
+    async copyDiagnostic() { await statusPanel.querySelector('button').listeners.click(); },
+    get createdPanels() { return createdPanels; },
     get phase() { return context.getPhase(); },
     get panelVisible() { return panelVisible; },
     get removals() { return removals; },
@@ -106,6 +134,7 @@ for (const [name, nextUrl] of [
     assert.equal(page.location.search, '');
     assert.equal(page.input.innerText, 'Test prompt');
     assert.equal(page.phase, 'Envío observado');
+    assert.equal(page.createdPanels, 0, 'Normal runs must never mount the panel');
   });
 }
 
@@ -122,44 +151,88 @@ test('a different chat path prevents sending a ready composer', async () => {
   assert.equal(page.sends, 0);
 });
 
-// notify is spied on to create a stand-in status panel. The real main() must
-// remove that element only after observing activity, not merely after click().
-test('confirmed send removes the panel immediately without a success notice', async () => {
+// Exercise the actual notify(), not a spy that would mask rendering bugs.
+test('successful send never creates a panel, not even transiently', async () => {
   const page = readyComposer(null);
   await page.run();
-  assert.equal(page.panelVisible, false, 'Success must not leave the panel on screen');
-  assert.equal(page.removals, 1);
-  assert.equal(page.removedAt, page.confirmedAt);
+  assert.equal(page.createdPanels, 0);
+  assert.equal(page.panelVisible, false);
+  assert.equal(page.removals, 0);
   assert.equal(page.sends, 1);
-  assert.equal(page.statuses.some(status => status.includes('ha iniciado el mensaje')), false);
+  assert.equal(page.statuses.length, 0);
   assert.match(page.diagnostic(), /Envío observado/);
+  assert.match(page.diagnostic(), /Cargando texto/);
+  assert.match(page.diagnostic(), /ha iniciado el mensaje/);
 });
 
-test('panel stays visible until delayed send acknowledgement', async () => {
+test('waiting for delayed acknowledgement remains silent', async () => {
   const page = readyComposer(null, { delay: 600 });
   await page.run();
   assert.ok(page.pendingPanels.length >= 3);
-  assert.ok(page.pendingPanels.every(Boolean), 'Do not hide the pending-send status');
+  assert.ok(page.pendingPanels.every(visible => !visible));
+  assert.equal(page.createdPanels, 0);
   assert.equal(page.panelVisible, false);
-  assert.equal(page.removedAt, page.confirmedAt);
-  assert.equal(page.removals, 1);
 });
 
-test('unconfirmed send keeps the error panel and never retries', async () => {
+test('unconfirmed send shows only the warning panel and never retries', async () => {
   const page = readyComposer(null, { acknowledge: false });
   await page.run();
   assert.equal(page.phase, 'Envío sin confirmar');
+  assert.ok(page.pendingPanels.every(visible => !visible));
+  assert.equal(page.createdPanels, 1);
   assert.equal(page.panelVisible, true);
   assert.equal(page.removals, 0);
   assert.equal(page.sends, 1);
-  assert.match(page.statuses.at(-1), /^E31:/);
+  assert.equal(page.statuses.length, 1);
+  assert.match(page.statuses[0], /^E31:/);
 });
 
-test('successful send tolerates an already removed panel without recreating it', async () => {
+test('successful send tolerates an absent panel', async () => {
   const page = readyComposer(null, { panelAlreadyRemoved: true });
   await page.run();
   assert.equal(page.phase, 'Envío observado');
   assert.equal(page.panelVisible, false);
-  assert.equal(page.removals, 0);
+  assert.equal(page.createdPanels, 0);
   assert.equal(page.sends, 1);
+});
+
+test('ordinary progress messages are logged without creating UI', () => {
+  const page = readyComposer(null);
+  page.notify('Normal progress');
+  page.notify('More progress', false);
+  assert.equal(page.createdPanels, 0);
+  assert.equal(page.panelVisible, false);
+  assert.match(page.diagnostic(), /Normal progress/);
+  assert.match(page.diagnostic(), /More progress/);
+});
+
+for (const [kind, message] of [
+  ['error', 'E21: Selector unavailable.'],
+  ['failure', 'Could not confirm Extra High.'],
+  ['warning', 'E00: Another script instance is already running.']
+]) {
+  test(kind + ' keeps a visible panel with a working diagnostic button', async () => {
+    const page = readyComposer(null);
+    // Existing error, cancellation and conflict call sites use the alert flag.
+    page.notify(message, true);
+    assert.equal(page.panelVisible, true);
+    assert.equal(page.createdPanels, 1);
+    assert.equal(page.statuses.at(-1), message);
+    await page.copyDiagnostic();
+    assert.equal(page.clipboard.length, 1);
+    assert.match(page.clipboard[0], /ChatGPT Extra High/);
+    assert.ok(page.clipboard[0].includes(message));
+    assert.equal(page.clipboard[0].includes('Test prompt'), false);
+  });
+}
+
+test('normal progress cannot overwrite or hide an existing alert', () => {
+  const page = readyComposer(null);
+  page.notify('Important warning', true);
+  page.notify('Normal progress');
+  assert.equal(page.createdPanels, 1);
+  assert.equal(page.panelVisible, true);
+  assert.equal(page.statuses.length, 1);
+  assert.equal(page.statuses[0], 'Important warning');
+  assert.match(page.diagnostic(), /Normal progress/);
 });

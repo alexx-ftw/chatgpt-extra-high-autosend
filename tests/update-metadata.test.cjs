@@ -54,14 +54,15 @@ test('diagnostic helper uses the generic project name', () => {
 });
 
 
-test('runtime is unchanged from v1.3.3 except successful panel dismissal', () => {
+test('runtime is unchanged from v1.3.4 except alert-only panel rendering', () => {
   const { execFileSync } = require('node:child_process');
-  const previous = execFileSync('git', ['show', 'v1.3.3:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
-  const workflow = text => text.slice(text.indexOf('  function menuScopes()'),
-    text.indexOf('  // Expuesto localmente'));
-  assert.ok(workflow(source).length > 10000);
-  const previousSuccess = "        notify('La interfaz ha iniciado el mensaje con Extra High seleccionado.', false, 8_000);";
-  const currentSuccess = "        record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');\n        document.getElementById(STATUS_ID)?.remove();";
-  assert.ok(workflow(previous).includes(previousSuccess));
-  assert.equal(workflow(source), workflow(previous).replace(previousSuccess, currentSuccess));
+  const previous = execFileSync('git', ['show', 'v1.3.4:chatgpt-extra-high.user.js'], {cwd: root, encoding: 'utf8'});
+  const body = text => text.split('// ==/UserScript==')[1]
+    .replace(/const VERSION = '[^']+';/, "const VERSION = 'VERSION';");
+  const previousGate = '    record(message);\n    if (!document.body) return;';
+  const currentGate = '    record(message);\n' +
+    '    // Solo alertas (errores, fallos o advertencias); el progreso queda en el registro.\n' +
+    '    if (!error || !document.body) return;';
+  assert.ok(body(previous).includes(previousGate));
+  assert.equal(body(source), body(previous).replace(previousGate, currentGate));
 });
