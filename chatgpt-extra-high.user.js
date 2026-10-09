@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.6
+// @version      1.3.7
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.6';
+  const VERSION = '1.3.7';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -499,9 +499,10 @@
 
   async function movePower(state, direction) {
     const key = direction < 0 ? 'ArrowLeft' : 'ArrowRight';
-    // Eventos enviados a la fila NO llegan a sus descendientes. Probar también
-    // el thumb real y el root interno, incluso si el thumb está aria-hidden.
-    const targets = ['control', 'thumb', 'root'];
+    // El evento nace en el thumb y puede ascender hasta la fila. Empezar allí
+    // evita agotar 1.300 ms en una fila que no gestione directamente las teclas.
+    // Conservar fila y root como respaldo si ese control no responde.
+    const targets = ['thumb', 'control', 'root'];
     const tried = new Set();
     for (const name of targets) {
       guard();
@@ -705,7 +706,7 @@
     // por execCommand ni por defaultPrevented del evento de pegado.
   }
 
-  async function ensurePrompt() {
+  async function ensurePrompt(stableMs = READY_STABLE_MS) {
     const until = Math.min(deadline, Date.now() + 12_000);
     const nativeUntil = Date.now() + 250;
     let attempts = 0;
@@ -718,7 +719,7 @@
       if (enabled(node)) {
         if (matchesPrompt(node)) {
           if (node !== stableNode) { stableNode = node; stableSince = Date.now(); }
-          if (Date.now() - stableSince >= READY_STABLE_MS) return node;
+          if (Date.now() - stableSince >= stableMs) return node;
         } else {
           stableNode = null;
           if (normalize(textOf(node))) throw new Error('Hay un borrador distinto. Lo he conservado.');
@@ -733,7 +734,7 @@
         stableNode = null;
       }
       const now = Date.now();
-      const settleIn = stableNode ? Math.max(1, READY_STABLE_MS - (now - stableSince)) :
+      const settleIn = stableNode ? Math.max(1, stableMs - (now - stableSince)) :
         (enabled(node) && attempts < 3 && nextAttempt > now ? nextAttempt - now : POLL_MS);
       await waitForChange(Math.min(POLL_MS, Math.max(1, until - now), settleIn));
     }
@@ -753,12 +754,13 @@
     await waitFor(() => document.readyState !== 'loading' &&
       ((enabled(editor()) && editor()) ||
        (effort()?.getAttribute('aria-expanded') === 'true' && menuScopes()[0])),
-      'No encuentro el editor. Comprueba que has iniciado sesión.', TIMEOUT_MS, READY_STABLE_MS);
+      'No encuentro el editor. Comprueba que has iniciado sesión.', TIMEOUT_MS);
     // Un menú previamente abierto puede ocultar el editor con aria-hidden.
     await closeEffortMenu(effort());
 
-    // Primero el texto, sin ningún menú que pueda retener el foco.
-    await ensurePrompt();
+    // Primero el texto, sin ningún menú que pueda retener el foco. La estabilidad
+    // del compositor completo se comprueba una sola vez, justo antes de enviar.
+    await ensurePrompt(0);
     record('Texto confirmado en editor ' + editor()?.tagName +
       '; data-composer-markdown=' + Boolean(editor()?.hasAttribute('data-composer-markdown')));
     phase = '2/3 Selector';
@@ -768,23 +770,39 @@
     phase = '3/3 Envío';
     notify('Paso 3/3 · Extra High confirmado. Preparando envío…');
     // El cambio de esfuerzo puede reconstruir el editor. No enviar vacío.
-    await ensurePrompt();
+    await ensurePrompt(0);
 
-    const button = await waitFor(() => {
+    // Una única ventana final para texto, esfuerzo y envío. La identidad de los
+    // tres controles forma parte del estado: un reemplazo de React reinicia la
+    // ventana aunque el texto y la etiqueta no cambien.
+    let candidate = null;
+    const readyToSend = () => {
       const current = editor();
-      if (!current || !matchesPrompt(current) || !isExtraHigh()) return null;
-      const root = current.closest('form') || document;
-      return [...root.querySelectorAll(SEND)].find(enabled);
-    }, 'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.', TIMEOUT_MS, SEND_STABLE_MS);
+      const trigger = effort();
+      let button = null;
+      if (enabled(current) && matchesPrompt(current) && isExtraHigh() &&
+          trigger?.getAttribute('aria-expanded') !== 'true') {
+        const root = current.closest('form') || document;
+        button = [...root.querySelectorAll(SEND)].find(enabled);
+      }
+      if (!button) { candidate = null; return null; }
+      if (!candidate || candidate.input !== current || candidate.trigger !== trigger || candidate.button !== button) {
+        candidate = { input: current, trigger, button };
+      }
+      return candidate;
+    };
+    const ready = await waitFor(readyToSend,
+      'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.', TIMEOUT_MS, SEND_STABLE_MS);
+    const button = ready.button;
 
     guard();
-    if (!isExtraHigh() || !matchesPrompt(editor()) || !enabled(button)) {
+    if (readyToSend() !== ready) {
       throw new Error('El estado del editor cambió antes del envío.');
     }
     // Consumir solo ahora: conservar parámetros ajenos y evitar el reenvío
     // al recargar. No hay esperas entre esta comprobación y el único click.
     consumeQuery();
-    if (!isExtraHigh() || !matchesPrompt(editor()) || !enabled(button)) {
+    if (readyToSend() !== ready) {
       throw new Error('La página cambió justo antes del envío. El texto se conserva.');
     }
     finished = true;

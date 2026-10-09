@@ -54,7 +54,7 @@ test('native prefilling avoids a redundant scripted paste', async () => {
 });
 
 test('text changed during the final stability window cannot be sent', async () => {
-  const page = readyComposer(null, { editAt: 200 });
+  const page = readyComposer(null, { editAt: 40 });
   await assert.rejects(page.run(), /El texto, Extra High o el botón Enviar/);
   assert.equal(page.sends, 0);
   assert.equal(page.input.innerText, 'Different draft');

@@ -156,6 +156,7 @@ function readyComposer(nextUrl, options = {}) {
         changed = true;
         location.href = new URL(nextUrl, location).href;
       }
+      options.onTick?.({ now, input, trigger, send, document, form, phase: context.getPhase() });
       queueMicrotask(callback);
     }
   });

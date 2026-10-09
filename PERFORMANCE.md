@@ -1,31 +1,45 @@
 # Rendimiento
 
-La versión 1.3.6 observa cambios del DOM y eventos de edición para continuar cuando se cumple cada condición, sin esperar siempre al siguiente sondeo. Conserva un temporizador de respaldo de 100 ms. Cada espera libera sus observadores, listeners y temporizadores al terminar. No depende de requestAnimationFrame.
+## Versión 1.3.7
 
-Las ventanas de estabilidad pasan a 60 ms, con una comprobación final de 80 ms. Si Extra High ya está seleccionado, no vuelve a abrir ni estabilizar el selector. Un pegado que ya produjo el texto esperado tampoco añade una pausa fija. Para un editor vacío, el margen inicial para el rellenado nativo pasa de 1.500 a 250 ms.
+Mantiene las esperas por eventos de la versión 1.3.6, con sondeo de respaldo de 100 ms y los mismos límites máximos. No depende de requestAnimationFrame, no aumenta la frecuencia de sondeo y conserva la limpieza de observadores, listeners y temporizadores.
 
-Se mantienen los límites máximos de espera para carga, selección y confirmación. Un control lento, un borrador distinto o un esfuerzo no confirmado no se saltan para ganar velocidad. El diagnóstico local registra los milisegundos hasta el clic de envío.
+La preparación ya no encadena tres pausas de 60 ms para comprobar repetidamente un editor que está listo. Comprueba el texto inmediatamente y conserva una única ventana final de **80 ms** en la que deben coincidir editor, esfuerzo Extra High, menú cerrado y botón Enviar habilitado. No se ha acortado esa ventana final. Si React sustituye el editor, el selector o el botón, la ventana vuelve a empezar aunque se mantenga su contenido.
+
+Cuando necesita cambiar Power, prueba primero el thumb interno con eventos que pueden propagarse a sus ancestros, en lugar de gastar primero hasta 1.300 ms en una fila sin un manejador eficaz. Conserva la fila, el root y el callback como rutas de respaldo. La mejora del deslizador depende de qué control responda en cada interfaz: no se garantiza que todas las variantes sean más rápidas.
+
+Se conserva el margen de 250 ms para el rellenado nativo cuando el editor está vacío, así como los plazos máximos para pegado, selección, carga y confirmación. Una consulta distinta, un borrador diferente o un esfuerzo no confirmado sigue impidiendo el envío. El panel aparece solo ante alertas. El registro local incluye el tiempo de preparación hasta el clic.
 
 ## Comparación reproducible
 
-Resultados con el mismo DOM y reloj simulados, sin red ni una sesión real de ChatGPT:
+Resultados obtenidos con **el mismo DOM y reloj simulados**, sin red ni una sesión real de ChatGPT. Miden pausas impuestas por el script, no la carga del sitio ni la velocidad de respuesta del modelo.
 
-| Escenario | v1.3.5 | v1.3.6 |
-| --- | ---: | ---: |
-| Texto y Extra High ya preparados | 1.900 ms | 260 ms |
-| Editor vacío, Extra High preparado, pegado síncrono | 3.850 ms | 510 ms |
-| Texto preparado, cambio Pro → Extra High con teclado de respaldo | 4.050 ms | 1.740 ms |
+| Escenario | v1.3.5 | v1.3.6 | v1.3.7 |
+| --- | ---: | ---: | ---: |
+| Texto y Extra High ya preparados | 1.900 ms | 260 ms | 80 ms |
+| Editor vacío, Extra High preparado, pegado síncrono | 3.850 ms | 510 ms | 330 ms |
+| Texto preparado, Pro → Extra High, manejador en el control interno | 4.050 ms | 1.740 ms | 260 ms |
 
-Son pausas impuestas por el script en estos escenarios, no tiempos garantizados desde que se abre la web ni mejoras de la velocidad de respuesta del modelo. La prueba del deslizador conserva un intento sin respuesta antes de usar su control interno.
+Respecto a 1.3.6, estas simulaciones reducen las pausas un 69 %, 35 % y 85 %, respectivamente. En la tercera, la fila exterior no responde directamente y el thumb sí: por eso desaparece un intento de 1.300 ms sin respuesta. Otras variantes pueden necesitar rutas de respaldo.
 
 ```sh
 node scripts/benchmark.cjs
 ```
 
-Para comparar otra versión, la variable de entorno `SCRIPT_UNDER_TEST` acepta la ruta local a su userscript. El archivo de prueba no se abre en un navegador: se ejecuta en el mismo entorno simulado.
+Para comparar otra versión, `SCRIPT_UNDER_TEST` acepta la ruta local a su userscript. Por ejemplo, después de guardar el archivo de una versión anterior:
+
+```sh
+SCRIPT_UNDER_TEST=/tmp/previous.user.js node scripts/benchmark.cjs
+```
+
+El archivo se ejecuta en el entorno de pruebas, no en un navegador. Los tiempos reales dependen de cuándo la web esté lista, de la carga del navegador y de los controles disponibles.
 
 ## Comprobaciones
 
-Las pruebas cubren las rutas rápidas, pegado asíncrono y rechazado, rellenado nativo, controles lentos, cambios de texto antes del envío, notificaciones solo ante alertas y protección de envío único. También comprueban el despertar por cambios DOM, reinicio de la estabilidad cuando un estado se revierte, timeouts y liberación de observadores, temporizadores y listeners.
+```sh
+node --test
+node --check chatgpt-extra-high.user.js
+node scripts/sync-distribution.cjs --check
+```
 
-No son pruebas de integración con una cuenta real. Los tiempos reales dependen de la página, el navegador, la conexión y los controles disponibles.
+Las 83 pruebas de esta versión cubren pegado asíncrono y rechazado, rellenado nativo, controles lentos, cambios de texto/esfuerzo antes del envío, reemplazos de elementos, menú abierto, alertas y envío único. También comprueban el despertar por cambios DOM, reinicio de estabilidad, timeouts y liberación de observadores, temporizadores y listeners. Son pruebas simuladas, no una certificación de integración con ChatGPT.

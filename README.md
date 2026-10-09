@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.6.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.7.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -54,7 +54,7 @@ Admite una opción de menú o el deslizador Power. Intenta eventos de teclado y 
 
 ## Rendimiento
 
-Preparación acelerada mediante esperas por eventos y pausas de estabilidad más cortas. Consulta la [comparación reproducible y sus límites](./PERFORMANCE.md). Para ejecutar el benchmark: `node scripts/benchmark.cjs`.
+Preparación acelerada mediante eventos y una comprobación final conjunta de 80 ms, sin encadenar pausas redundantes. Si cambia el editor, el selector o el botón, esa ventana vuelve a empezar. El control interno del deslizador se prueba primero; se conservan las rutas de respaldo. Consulta la [comparación reproducible y sus límites](./PERFORMANCE.md). Para ejecutar el benchmark: `node scripts/benchmark.cjs`.
 
 ## Protección y privacidad
 

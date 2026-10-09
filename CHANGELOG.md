@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.7 - 2026-10-09
+
+- Elimina tres pausas redundantes de preparación y conserva la comprobación final de 80 ms.
+- Verifica conjuntamente texto, Extra High, menú cerrado y botón habilitado antes de enviar.
+- Reinicia la ventana si se sustituye cualquiera de los tres controles, aunque sus valores sean iguales.
+- Prueba primero el thumb del deslizador, con propagación del evento y respaldos anteriores.
+- Mantiene el margen de rellenado nativo, los timeouts, el envío único y el panel solo para alertas.
+- Verificación: 83 pruebas automáticas sobre DOM/reloj simulados, más sintaxis y sincronización.
+- Benchmark simulado frente a 1.3.6: preparado 260 → 80 ms; vacío 510 → 330 ms; deslizador con control interno 1.740 → 260 ms. No mide la web real ni la respuesta del modelo.
+
 ## 1.3.6 - 2026-10-09
 
 - Acelera las esperas mediante cambios DOM y eventos, con temporizador de respaldo.
