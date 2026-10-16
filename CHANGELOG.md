@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.8 - 2026-10-16
+
+- Distingue la etiqueta seleccionada de las etiquetas ocultas de medición; ignora comentarios DOM.
+- No confunde Max, Ultra, Persistent ni una lista de niveles con Extra High.
+- Reconoce botones de envío semánticos, etiquetas con atajo y `type="button"` dentro del compositor.
+- No pulsa controles de voz, controles con acciones distintas ni un conjunto ambiguo de botones.
+- Recupera de forma limitada un restablecimiento del esfuerzo o un editor vaciado antes del primer envío.
+- Conserva un estado de diagnóstico al detenerse, separado del estado que se lee al copiarlo.
+- Añade regresiones de preparación; conserva la ventana final rápida y el panel solo ante alertas.
+
 ## 1.3.7 - 2026-10-09
 
 - Elimina tres pausas redundantes de preparación y conserva la comprobación final de 80 ms.

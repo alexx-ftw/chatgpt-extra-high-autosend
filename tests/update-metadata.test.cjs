@@ -54,7 +54,7 @@ test('diagnostic helper uses the generic project name', () => {
 });
 
 
-test('text, effort, URL, cancellation and single-send guards are unchanged from v1.3.5', () => {
+test('draft matching, URL guard and notification protections are unchanged from v1.3.5', () => {
   const { execFileSync } = require('node:child_process');
   const previous = execFileSync('git', ['show', 'v1.3.5:chatgpt-extra-high.user.js'], { cwd: root, encoding: 'utf8' });
   const extract = (text, name) => {
@@ -63,8 +63,8 @@ test('text, effort, URL, cancellation and single-send guards are unchanged from 
     assert.ok(start >= 0 && end > start, 'Missing function: ' + name);
     return text.slice(start, end + 5);
   };
-  for (const name of ['matchesPrompt', 'isExtraHigh', 'queryStatus', 'guard',
-      'consumeQuery', 'sliderReactProps', 'notify', 'onInteraction']) {
+  for (const name of ['matchesPrompt', 'queryStatus', 'guard',
+      'consumeQuery', 'sliderReactProps', 'notify']) {
     assert.equal(extract(source, name), extract(previous, name), name + ' must preserve its protections');
   }
 });

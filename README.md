@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.7.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.8.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -67,6 +67,12 @@ Preparación acelerada mediante eventos y una comprobación final conjunta de 80
 El texto forma parte de la URL y puede quedar en el historial u otros registros del navegador o del servicio. No uses este mecanismo para datos sensibles.
 
 ## Diagnóstico
+
+La versión 1.3.8 registra el estado de preparación (texto, nivel, menú y botón Enviar) cuando cambia, y conserva una captura categórica al detenerse. Así se distingue ese momento del estado de la página cuando se copia el informe después. No guarda la consulta ni la dirección completa.
+
+Antes del primer envío, puede recuperar Extra High como máximo dos veces si el nivel se restablece, o volver a cargar una vez el texto si el editor se vacía. Una edición distinta, navegación, cancelación manual o actividad de conversación impide esta recuperación. No hay reintentos después del clic de envío.
+
+El selector descarta las etiquetas ocultas de medición y no equipara el nivel Max a Extra High. Enviar se localiza en el mismo compositor mediante marcas semánticas o una etiqueta de envío, también cuando el botón es `type="button"`. Un control ambiguo no se pulsa.
 
 El panel no se crea durante la carga del texto, la selección de Extra High, la espera de confirmación ni el envío correcto. Solo aparece ante errores, fallos o advertencias, como otra copia activa o un envío sin confirmar, con el botón para copiar el diagnóstico. El progreso se conserva en el registro local y sigue disponible desde la consola sin mostrar ninguna interfaz.
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.7
+// @version      1.3.8
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.7';
+  const VERSION = '1.3.8';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -51,14 +51,14 @@
     '#prompt-textarea[contenteditable="true"], textarea#prompt-textarea';
   const EFFORT = 'button[data-composer-navigation-target="reasoning"], ' +
     'button[data-codex-intelligence-trigger="true"][data-selected-reasoning-effort]';
-  const SEND = 'button[data-testid="send-button"], ' +
-    'button[type="submit"][aria-label="Send"], ' +
-    'button[type="submit"][aria-label="Send message"], ' +
-    'button[type="submit"][aria-label="Enviar"], ' +
-    'button[type="submit"][aria-label="Enviar mensaje"]';
+  const SEND = 'button[data-testid="send-button"], button[data-testid="composer-send-button"], ' +
+    'button[data-composer-submit], button[data-composer-navigation-target="send"], ' +
+    'button[aria-label^="Send" i], button[aria-label^="Enviar" i]';
   // Marcas de mensaje/actividad observadas en las capturas del usuario,
   // más las antiguas. La misma detección protege y confirma el único envío.
   const ACTIVITY = '[data-user-message-bubble="true"], [data-message-author-role="user"], ' +
+    '[data-message-role="user"], [data-chatgpt-search-message-ids], ' +
+    '[data-stop-generating], ' +
     '[data-testid="stop-button"], button[aria-label="Stop generating"], ' +
     'form[data-chatgpt-composer] button[aria-label="Stop"], ' +
     'form[data-chatgpt-composer] button[aria-label="Detener"]';
@@ -67,6 +67,9 @@
   let writing = false;
   let finished = false;
   let phase = 'Inicio';
+  let lastReadiness = '';
+  let stoppedSnapshot = '';
+  let readinessResets = 0;
   const trace = [];
   const record = message => {
     trace.push(new Date().toISOString().slice(11, 19) + ' ' + String(message).slice(0, 700));
@@ -116,21 +119,84 @@
     return (form && [...form.querySelectorAll(fallback)].find(painted)) ||
       [...document.querySelectorAll(fallback)].find(painted);
   };
-  const targetLabel = text => /(?:^|[^a-z])extra[\s-]+(?:high|alto)(?:$|[^a-z])/i.test(normalize(text));
-  const effortLabel = trigger => normalize(textOf(trigger?.querySelector(
-    '[class*="ModelPickerTriggerLabel-"], [data-testid="model-switcher-label"]') || trigger));
+  // Un trigger puede contener etiquetas de medición para TODOS los niveles.
+  // Leer solo sus descendientes visibles, sin heredar aria-hidden del fondo modal.
+  function selectedLabelText(root) {
+    const read = (node, isRoot = false) => {
+      if (node.nodeType === 3) return node.textContent || '';
+      if (!node.childNodes) return textOf(node); // También admite dobles DOM en pruebas.
+      if (node.nodeType != null && node.nodeType !== 1) return ''; // Ignorar comentarios de React.
+      if (!isRoot) {
+        if (node.matches?.('[hidden], [inert], [aria-hidden="true"], [role="menu"], [role="listbox"], select, option, svg, script, style') ||
+            node.classList?.contains('sr-only')) return '';
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0') return '';
+      }
+      return [...node.childNodes].map(child => read(child)).join(' ');
+    };
+    return root ? normalize(read(root, true)).replace(/\s+/g, ' ') : '';
+  }
+  const levelNames = text => (normalize(text).match(/\b(?:extra[\s-]+(?:high|alto)|instant|none|minimal|light|low|medium|standard|extended|heavy|high|alto|bajo|max|ultra|persistent|pro)\b/gi) || [])
+    .map(value => value.toLowerCase().replace(/[-\s]+/g, ' '));
+  const targetLabel = text => {
+    const levels = levelNames(text);
+    return levels.length > 0 && levels.every(level => level === 'extra high' || level === 'extra alto');
+  };
+  const effortLabel = trigger => {
+    const preferred = trigger?.querySelector('[class*="ModelPickerTriggerLabel-"], [data-testid="model-switcher-label"]');
+    return selectedLabelText(preferred || trigger);
+  };
 
   function isExtraHigh() {
     const trigger = effort();
     if (!trigger || trigger.matches(':disabled') || trigger.getAttribute('aria-disabled') === 'true') return false;
     const value = trigger.getAttribute('data-selected-reasoning-effort');
     const label = effortLabel(trigger);
-    const targetValue = [TARGET_EFFORT, 'xhigh', 'extra_high'].includes(value);
-    if (/\bpro\b/i.test(label)) return false;
-    // No enviar mientras etiqueta y atributo se contradigan durante un render.
-    if (targetLabel(label)) return !value || targetValue;
-    if (/\b(?:instant|light|low|medium|standard|extended|heavy|high|alto|bajo)\b/i.test(label)) return false;
-    return targetValue;
+    if (targetLabel(label)) return !value || [TARGET_EFFORT, 'xhigh', 'extra_high'].includes(value);
+    // Max puede ser un nivel distinto. Solo el valor explícito xhigh sirve sin etiqueta.
+    if (levelNames(label).length) return false;
+    return ['xhigh', 'extra_high'].includes(value);
+  }
+
+  function sendCandidates(input) {
+    const root = input?.closest('form') || input?.closest('[data-composer-body]');
+    if (!root) return [];
+    const negative = node => node.hasAttribute('data-stop-generating') ||
+      /\b(?:stop|detener|parar|dictate|dictar|voice|voz|record|grabar|upload|adjuntar)\b/i.test(node.getAttribute('aria-label') || '');
+    const named = [...root.querySelectorAll(SEND)].filter(node => {
+      if (!visible(node) || negative(node)) return false;
+      return ['send-button', 'composer-send-button'].includes(node.getAttribute('data-testid')) ||
+        node.hasAttribute('data-composer-submit') || node.getAttribute('data-composer-navigation-target') === 'send' ||
+        /^(?:send(?: message| prompt)?|enviar(?: mensaje)?)(?:\s*\((?:ctrl|control|cmd|command|shift|alt|⌘|enter|return|intro)[^)]*\))?$/i.test(normalize(node.getAttribute('aria-label')));
+    });
+    if (named.length) return named;
+    // Respaldo conservador: solo submit SIN etiqueta en el compositor identificado.
+    // Nunca pulsar el primer submit global ni usar Enter en un editor desconocido.
+    if (!root.hasAttribute?.('data-chatgpt-composer')) return [];
+    return [...root.querySelectorAll('button[type="submit"]')].filter(node => visible(node) && !negative(node) &&
+      !normalize(node.getAttribute('aria-label')) && !normalize(node.getAttribute('title')) &&
+      /^(?:↑|➤|➜|➔)?$/.test(selectedLabelText(node)));
+  }
+
+  function readinessState() {
+    const input = editor(), trigger = effort();
+    const candidates = sendCandidates(input);
+    const text = !input ? 'ausente' : matchesPrompt(input) ? 'coincide' : normalize(textOf(input)) ? 'distinto' : 'vacío';
+    const target = isExtraHigh();
+    const open = trigger?.getAttribute('aria-expanded') === 'true';
+    const button = candidates.length === 1 && enabled(candidates[0]) ? candidates[0] : null;
+    const sendState = candidates.length > 1 ? 'ambiguo' : !candidates.length ? 'ausente' : button ? 'listo' : 'deshabilitado';
+    const summary = 'texto=' + text + '; editor=' + (enabled(input) ? 'listo' : 'no disponible') +
+      '; nivel=' + (effortLabel(trigger).slice(0, 100) || 'desconocido') + '; Extra High=' + target +
+      '; menú=' + (open ? 'abierto' : 'cerrado') + '; envío=' + sendState;
+    return { input, trigger, text, target, open, button, summary };
+  }
+
+  function captureStop() {
+    if (stoppedSnapshot) return;
+    let summary = lastReadiness || 'estado no disponible';
+    try { summary = readinessState().summary; } catch { /* No ocultar el error original. */ }
+    stoppedSnapshot = new Date().toISOString().slice(11, 19) + ' ' + phase + '; ' + summary;
   }
 
   function diagnostic() {
@@ -144,6 +210,9 @@
       'Otra ejecución previa: ' + Boolean(previousRun),
       'Parámetro: ' + QUERY_KEYS.filter(key => url.searchParams.has(key)).join(', '),
       'URL actual: ' + queryStatus().summary,
+      'Último estado de preparación: ' + (lastReadiness || '(sin evaluar)'),
+      'Estado al detenerse: ' + (stoppedSnapshot || '(no detenido)'),
+      'Reinicios de estabilidad: ' + readinessResets,
       'Editor detectado: ' + Boolean(input),
       'Coincidencias del editor en DOM: ' + document.querySelectorAll(EDITOR).length,
       'Tipo de editor: ' + (input ? (input.tagName.toLowerCase() +
@@ -156,8 +225,8 @@
       'Esfuerzo: ' + (trigger?.getAttribute('data-selected-reasoning-effort') || '(sin atributo)'),
       'Menú expandido: ' + trigger?.getAttribute('aria-expanded'),
       'Power: ' + (power ? power.key : '(no detectado)'),
-      'Botones Enviar detectados: ' + document.querySelectorAll(SEND).length,
-      'Botones Enviar habilitados: ' + [...document.querySelectorAll(SEND)].filter(enabled).length,
+      'Botones Enviar detectados: ' + sendCandidates(input).length,
+      'Botones Enviar habilitados: ' + sendCandidates(input).filter(enabled).length,
       'Menús visibles: ' + menuScopes().length,
       'Mensaje o actividad detectado: ' + Boolean(document.querySelector(ACTIVITY)),
       '--- Registro ---', ...trace
@@ -232,7 +301,7 @@
         event.target?.closest?.('button, [role="menuitem"], [role="menuitemradio"], [role="slider"]')) {
       cancelled = 'Cancelado por interacción manual con los controles.';
     }
-    if (cancelled) record(cancelled);
+    if (cancelled) { captureStop(); record(cancelled); }
   }
   function onNavigate() { cancelled = 'Has cambiado de página.'; }
   for (const type of INTERACTIONS) document.addEventListener(type, onInteraction, true);
@@ -313,6 +382,7 @@
           attributeFilter: ['class', 'style', 'hidden', 'inert', 'disabled',
             'contenteditable', 'aria-disabled', 'aria-hidden', 'aria-expanded',
             'aria-valuenow', 'aria-valuetext', 'data-state', 'data-disabled',
+            'aria-label', 'type', 'data-testid', 'data-composer-submit',
             'data-selected-reasoning-effort']
         });
       } catch {
@@ -747,6 +817,60 @@
     history.replaceState(history.state, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
   }
 
+  async function waitForReadyToSend() {
+    const message = 'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.';
+    let candidate = null, since = 0, badSince = null, blankSince = null;
+    let repairs = 0, refills = 0;
+    while (Date.now() <= deadline) {
+      guard();
+      const state = readinessState();
+      if (state.summary !== lastReadiness) {
+        lastReadiness = state.summary;
+        record('Preparación envío: ' + state.summary);
+      }
+      if (state.text === 'distinto') throw new Error(message + ' El borrador cambió; lo he conservado.');
+      const now = Date.now();
+      const valid = enabled(state.input) && state.text === 'coincide' && state.target && !state.open && state.button;
+      if (valid) {
+        if (!candidate || candidate.input !== state.input || candidate.trigger !== state.trigger || candidate.button !== state.button) {
+          if (candidate) readinessResets++;
+          candidate = { input: state.input, trigger: state.trigger, button: state.button };
+          since = now;
+        }
+        if (now - since >= SEND_STABLE_MS) return candidate;
+      } else {
+        if (candidate) readinessResets++;
+        candidate = null;
+      }
+      // Recuperación limitada ANTES del único clic. No tocar borradores distintos,
+      // ni reintentar tras envío, navegación, actividad o intervención manual.
+      if (enabled(state.input) && state.text === 'vacío' && !state.open) {
+        blankSince ??= now;
+        if (now - blankSince >= 250) {
+          if (refills++ >= 1) throw new Error(message + ' El editor se vacía repetidamente.');
+          record('Editor vaciado durante la preparación: restaurando el texto original una vez.');
+          await ensurePrompt(0);
+          blankSince = null;
+          continue;
+        }
+      } else blankSince = null;
+      if (enabled(state.input) && state.text === 'coincide' && state.trigger && !state.target && !state.open) {
+        badSince ??= now;
+        if (now - badSince >= 250) {
+          if (repairs++ >= 2) throw new Error(message + ' El nivel no se mantiene en Extra High.');
+          record('Nivel cambiado durante la preparación: recuperando Extra High (' + repairs + '/2).');
+          try { await selectExtraHigh(); } catch (error) { throw new Error(message + ' ' + error.message); }
+          badSince = null;
+          continue;
+        }
+      } else badSince = null;
+      if (now >= deadline) break;
+      await waitForChange(Math.min(POLL_MS, deadline - now,
+        candidate ? Math.max(1, SEND_STABLE_MS - (now - since)) : POLL_MS));
+    }
+    throw new Error(message + ' Último estado: ' + lastReadiness);
+  }
+
   async function main() {
     phase = '1/3 Texto';
     await waitFor(() => document.body, 'La página no terminó de cargar.');
@@ -772,37 +896,22 @@
     // El cambio de esfuerzo puede reconstruir el editor. No enviar vacío.
     await ensurePrompt(0);
 
-    // Una única ventana final para texto, esfuerzo y envío. La identidad de los
-    // tres controles forma parte del estado: un reemplazo de React reinicia la
-    // ventana aunque el texto y la etiqueta no cambien.
-    let candidate = null;
-    const readyToSend = () => {
-      const current = editor();
-      const trigger = effort();
-      let button = null;
-      if (enabled(current) && matchesPrompt(current) && isExtraHigh() &&
-          trigger?.getAttribute('aria-expanded') !== 'true') {
-        const root = current.closest('form') || document;
-        button = [...root.querySelectorAll(SEND)].find(enabled);
-      }
-      if (!button) { candidate = null; return null; }
-      if (!candidate || candidate.input !== current || candidate.trigger !== trigger || candidate.button !== button) {
-        candidate = { input: current, trigger, button };
-      }
-      return candidate;
-    };
-    const ready = await waitFor(readyToSend,
-      'El texto, Extra High o el botón Enviar no quedaron listos. No se ha enviado.', TIMEOUT_MS, SEND_STABLE_MS);
+    const ready = await waitForReadyToSend();
     const button = ready.button;
+    const stillReady = () => {
+      const state = readinessState();
+      return enabled(state.input) && state.text === 'coincide' && state.target && !state.open &&
+        state.input === ready.input && state.trigger === ready.trigger && state.button === ready.button;
+    };
 
     guard();
-    if (readyToSend() !== ready) {
+    if (!stillReady()) {
       throw new Error('El estado del editor cambió antes del envío.');
     }
     // Consumir solo ahora: conservar parámetros ajenos y evitar el reenvío
     // al recargar. No hay esperas entre esta comprobación y el único click.
     consumeQuery();
-    if (readyToSend() !== ready) {
+    if (!stillReady()) {
       throw new Error('La página cambió justo antes del envío. El texto se conserva.');
     }
     finished = true;
@@ -835,6 +944,7 @@
   }
 
   main().catch(error => {
+    captureStop();
     finished = true;
     cleanup();
     console.warn('[ChatGPT q → Extra High]', error.message);
