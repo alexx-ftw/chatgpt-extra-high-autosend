@@ -104,6 +104,11 @@ function readyComposer(nextUrl, options = {}) {
     element.dispatchEvent = event => { keyEvent(event, element); return true; };
   }
   reflectLevel();
+  const reply = node({});
+  reply.innerText = 'Fixture response';
+  const errorBanner = node({ role: 'alert' });
+  errorBanner.innerText = 'Failed to fetch';
+  if (options.hiddenError) errorBanner.getClientRects = () => [];
   const document = {
     body: { append(panel) {
       statusPanel = panel; panelVisible = true; createdPanels++;
@@ -126,6 +131,13 @@ function readyComposer(nextUrl, options = {}) {
       return {};
     },
     querySelectorAll: selector => {
+      if (selector.includes('[role="alert"]')) {
+        return sends && options.errorAt !== undefined && now >= sentAt + options.errorAt ? [errorBanner] : [];
+      }
+      if (selector.includes('[data-message-author-role="assistant"]')) {
+        return sends && options.acknowledge !== false && !options.optimisticOnly &&
+          now >= sentAt + (options.responseDelay ?? options.delay ?? 0) ? [reply] : [];
+      }
       if (selector.includes('data-composer-markdown')) return [input];
       if (selector.includes('[role="menu"]')) return menuOpen ? [menu] : [];
       if (selector.includes('data-composer-navigation-target="reasoning"')) return [trigger];
@@ -166,7 +178,7 @@ function readyComposer(nextUrl, options = {}) {
     '  globalThis.checkEffort = isExtraHigh;\n  globalThis.interact = onInteraction;\n})();', context);
   return {
     run: context.run, statuses, location, input, send, trigger, pendingPanels,
-    diagnostic: context.report, notify: context.sendNotice, clipboard,
+    diagnostic: context.report, notify: context.sendNotice, clipboard, errorBanner, reply,
     isExtraHigh: context.checkEffort, interact: context.interact,
     async copyDiagnostic() { await statusPanel.querySelector('button').listeners.click(); },
     get createdPanels() { return createdPanels; },

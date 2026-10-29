@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.8
+// @version      1.3.9
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.8';
+  const VERSION = '1.3.9';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -70,6 +70,7 @@
   let lastReadiness = '';
   let stoppedSnapshot = '';
   let readinessResets = 0;
+  let sendOutcome = 'sin iniciar';
   const trace = [];
   const record = message => {
     trace.push(new Date().toISOString().slice(11, 19) + ' ' + String(message).slice(0, 700));
@@ -210,6 +211,8 @@
       'Otra ejecución previa: ' + Boolean(previousRun),
       'Parámetro: ' + QUERY_KEYS.filter(key => url.searchParams.has(key)).join(', '),
       'URL actual: ' + queryStatus().summary,
+      'Ruta actual: ' + routeKind(),
+      'Resultado del envío: ' + sendOutcome,
       'Último estado de preparación: ' + (lastReadiness || '(sin evaluar)'),
       'Estado al detenerse: ' + (stoppedSnapshot || '(no detenido)'),
       'Reinicios de estabilidad: ' + readinessResets,
@@ -871,6 +874,116 @@
     throw new Error(message + ' Último estado: ' + lastReadiness);
   }
 
+  function routeKind() {
+    if (/^\/c\/local-chatgpt(?:%3a|:)/i.test(location.pathname)) return 'conversación local';
+    if (/^\/c\/[^/]+\/?$/.test(location.pathname)) return 'conversación';
+    return location.pathname === '/' ? 'raíz' : 'otra ruta';
+  }
+
+  function readSendError() {
+    // Solo avisos de la interfaz. Nunca buscar «Failed to fetch» en el prompt,
+    // respuestas Markdown, bloques de código ni en nuestro propio diagnóstico.
+    const excluded = '#' + STATUS_ID + ', pre, code, .markdown, .prose, ' +
+      '[data-message-author-role="user"], [data-message-role="user"], [data-user-message-bubble]';
+    const inspect = node => {
+      if (!visible(node) || node.closest(excluded)) return '';
+      const text = normalize(textOf(node)).replace(/(?:retry|try again|reintentar|volver a intentar)\s*$/i, '').trim();
+      if (text.length > 500) return '';
+      if (/\bfailed to fetch\b/i.test(text)) return 'Failed to fetch';
+      if (/\bnetworkerror when attempting to fetch resource\b/i.test(text)) return 'NetworkError';
+      if (/\b(?:a network error occurred|unable to connect|error de red)\b/i.test(text)) return 'Error de conexión';
+      return '';
+    };
+    const alerts = document.querySelectorAll('[role="alert"], [data-testid="conversation-error"], ' +
+      '[data-conversation-recovery-status="failed"], [data-composer-submission-status]');
+    for (const node of alerts) {
+      const error = inspect(node);
+      if (error) return error;
+    }
+    // Algunas versiones muestran un recuadro sin role=alert y con botón Retry.
+    for (const button of document.querySelectorAll('button')) {
+      if (!visible(button) || button.closest(excluded) ||
+          !/^(?:retry|try again|reintentar|volver a intentar)$/i.test(normalize(textOf(button)))) continue;
+      let node = button.parentElement;
+      for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+        if (node === document.body || node.matches('main, form, [data-message-author-role="assistant"], [data-message-role="assistant"]')) break;
+        const error = inspect(node);
+        if (error) return error;
+      }
+    }
+    return '';
+  }
+
+  function visibleResponse() {
+    const content = '.markdown, .prose, [data-message-content], [data-message-text], p';
+    const selector = ['[data-message-author-role="assistant"]', '[data-message-role="assistant"]']
+      .flatMap(root => content.split(', ').map(child => root + ' ' + child)).join(', ');
+    return [...document.querySelectorAll(selector)].find(node => {
+      if (!visible(node) || node.closest('[role="status"], [role="alert"], [data-conversation-recovery-status]')) return false;
+      const text = normalize(textOf(node));
+      return text && !/^(?:thinking|pensando|working|loading|cargando|failed to fetch|chatgpt said:)[.…\s]*$/i.test(text);
+    }) || null;
+  }
+
+  async function observeSendOutcome() {
+    // No modificar fetch, peticiones, tokens ni el historial. Solo observar el DOM.
+    // Una burbuja local o un botón Stop NO demuestran que el servidor respondió.
+    let interrupted = false;
+    const stop = () => { interrupted = true; };
+    const onManualAction = event => {
+      if (!event.isTrusted || event.target?.closest?.('#' + STATUS_ID)) return;
+      if (event.type === 'beforeinput' || event.target?.closest?.('button, a, [role="button"]')) stop();
+    };
+    window.addEventListener('pagehide', stop);
+    window.addEventListener('popstate', stop);
+    document.addEventListener('pointerdown', onManualAction, true);
+    document.addEventListener('beforeinput', onManualAction, true);
+    sendOutcome = 'pendiente';
+    let outcome;
+    try {
+      outcome = await waitForValue(() => {
+        if (interrupted) return { kind: 'interrupted' };
+        const error = readSendError();
+        if (error) return { kind: 'error', error };
+        if (visibleResponse()) return { kind: 'response' };
+        if (document.querySelector(ACTIVITY)) sendOutcome = 'actividad local, sin respuesta confirmada';
+        return null;
+      }, 30_000, 0, false);
+    } finally {
+      window.removeEventListener('pagehide', stop);
+      window.removeEventListener('popstate', stop);
+      document.removeEventListener('pointerdown', onManualAction, true);
+      document.removeEventListener('beforeinput', onManualAction, true);
+    }
+    if (outcome?.kind === 'interrupted') {
+      sendOutcome = 'seguimiento interrumpido por navegación o acción manual';
+      record(sendOutcome);
+      return;
+    }
+    if (outcome?.kind === 'error') {
+      sendOutcome = 'error: ' + outcome.error;
+      phase = 'Error tras el envío';
+      captureStop();
+      notify('E32: ChatGPT muestra «' + outcome.error + '» después de pulsar Enviar.\n' +
+        'No reintento ni recargo para evitar duplicados. Conserva el texto y usa Retry manualmente.\n' +
+        'Este aviso no identifica la causa de red. Usa «Copiar diagnóstico».', true);
+      return;
+    }
+    if (outcome?.kind === 'response') {
+      sendOutcome = 'respuesta visible';
+      phase = 'Envío observado';
+      record('La interfaz ha iniciado el mensaje y muestra contenido de respuesta.');
+      document.getElementById(STATUS_ID)?.remove();
+      return;
+    }
+    sendOutcome = 'sin confirmar: no se observó contenido de respuesta en 30 s';
+    phase = 'Envío sin confirmar';
+    captureStop();
+    notify('E31: Se pulsó Enviar, pero aún no observo una respuesta tras 30 s.\n' +
+      'Puede seguir pensando: esto no confirma un fallo. No reintento para evitar duplicados.\n' +
+      'Usa «Copiar diagnóstico».', true);
+  }
+
   async function main() {
     phase = '1/3 Texto';
     await waitFor(() => document.body, 'La página no terminó de cargar.');
@@ -920,15 +1033,7 @@
       '; preparación=' + (Date.now() - startedAt) + ' ms');
     button.click();
     notify('Paso 3/3 · Se ha pulsado Enviar. Comprobando respuesta de la página…');
-    const observed = await waitForValue(() => document.querySelector(ACTIVITY), 12_000, 0, false);
-    if (observed) {
-      phase = 'Envío observado';
-      record('La interfaz ha iniciado el mensaje con Extra High seleccionado.');
-      document.getElementById(STATUS_ID)?.remove();
-      return;
-    }
-    phase = 'Envío sin confirmar';
-    notify('E31: Se pulsó Enviar, pero no detecto el inicio del mensaje.\nNo reintento para evitar duplicados. Usa «Copiar diagnóstico».', true);
+    await observeSendOutcome();
   }
 
   // Expuesto localmente para depuración. No se transmite ningún dato.

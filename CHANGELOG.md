@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.9 - 2026-10-29
+
+- No confirma el envío por una burbuja local ni por un botón Stop.
+- Observa contenido de respuesta y avisos de conexión durante hasta 30 segundos tras el clic.
+- Reconoce `Failed to fetch` en avisos o junto a Retry, sin buscar en mensajes del usuario ni en código.
+- Mantiene un único clic, el ajuste de Extra High, el autoupdate y los avisos solo ante problemas.
+- Añade resultado y categoría de ruta al diagnóstico, sin texto del prompt ni identificador del chat.
+- La causa del fallo de red de la sesión real sigue sin determinarse; no se añaden reintentos automáticos.
+
 ## 1.3.8 - 2026-10-16
 
 - Distingue la etiqueta seleccionada de las etiquetas ocultas de medición; ignora comentarios DOM.

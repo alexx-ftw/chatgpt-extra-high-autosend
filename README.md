@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.8.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.9.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -65,6 +65,14 @@ Preparación acelerada mediante eventos y una comprobación final conjunta de 80
 - El diagnóstico de controles, estados y pasos es local. No recopila deliberadamente el prompt, cookies ni tokens. Revísalo antes de compartirlo.
 
 El texto forma parte de la URL y puede quedar en el historial u otros registros del navegador o del servicio. No uses este mecanismo para datos sensibles.
+
+## Confirmación y errores de envío
+
+La versión 1.3.9 no considera que una burbuja del usuario, el botón Stop o una URL local prueben que existe una respuesta. Después del único clic observa la interfaz durante un máximo de 30 segundos, sin añadir espera antes de enviar.
+
+Si aparece un aviso visible como `Failed to fetch`, muestra E32 y conserva el diagnóstico. Si aparece contenido de respuesta del asistente, finaliza en silencio. Sin contenido observable al terminar el plazo muestra E31, una advertencia de falta de confirmación, no una afirmación de fallo: el modelo puede seguir pensando. Esta observación comprueba señales de la interfaz, no confirma la persistencia del mensaje en el servidor y no supervisa toda una respuesta larga.
+
+No modifica `fetch`, no intercepta peticiones y no recarga ni pulsa Retry automáticamente. Una acción manual o una navegación interrumpe la observación. El diagnóstico recoge el resultado y una categoría de ruta, nunca el identificador de conversación. Esta corrección evita falsas confirmaciones, pero no identifica ni repara por sí sola la causa de una petición de red fallida.
 
 ## Diagnóstico
 
