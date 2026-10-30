@@ -21,8 +21,8 @@ test('a user bubble or Stop control alone is not proof of a response', async () 
   const page = readyComposer(null, { optimisticOnly: true });
   await page.run();
   assert.equal(page.sends, 1);
-  assert.equal(page.phase, 'Envío sin confirmar');
-  assert.match(page.statuses.at(-1), /E31:/);
+  assert.equal(page.phase, 'Seguimiento finalizado sin confirmar');
+  assert.equal(page.createdPanels, 0);
   assert.doesNotMatch(page.diagnostic(), /La interfaz ha iniciado el mensaje/);
 });
 

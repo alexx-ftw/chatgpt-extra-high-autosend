@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.10 - 2026-10-30
+
+- Evita E31 por falta de respuesta a los 30 segundos cuando ya hay actividad visible.
+- Separa actividad de la interfaz, respuesta observable y errores explícitos; no trata una burbuja o Stop como éxito.
+- Sigue detectando fallos de conexión posteriores al plazo inicial.
+- Limita el seguimiento a 10 minutos y termina silenciosamente sin confirmar si la respuesta no es observable.
+- Conserva E31 cuando no se observa ninguna señal de inicio en 30 segundos.
+- Añade señales categóricas al diagnóstico y detiene el seguimiento al navegar a otro chat.
+- Mantiene el envío único, las ventanas rápidas, Extra High y el panel únicamente para alertas.
+
 ## 1.3.9 - 2026-10-29
 
 - No confirma el envío por una burbuja local ni por un botón Stop.

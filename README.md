@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.9.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.10.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -68,11 +68,15 @@ El texto forma parte de la URL y puede quedar en el historial u otros registros 
 
 ## Confirmación y errores de envío
 
-La versión 1.3.9 no considera que una burbuja del usuario, el botón Stop o una URL local prueben que existe una respuesta. Después del único clic observa la interfaz durante un máximo de 30 segundos, sin añadir espera antes de enviar.
+La versión 1.3.10 separa **actividad de la interfaz**, **respuesta visible** y **error explícito**. Una burbuja del usuario, un control Stop visible o el paso a una conversación con el editor vacío son señales de inicio, no prueba de recepción o persistencia en el servidor.
 
-Si aparece un aviso visible como `Failed to fetch`, muestra E32 y conserva el diagnóstico. Si aparece contenido de respuesta del asistente, finaliza en silencio. Sin contenido observable al terminar el plazo muestra E31, una advertencia de falta de confirmación, no una afirmación de fallo: el modelo puede seguir pensando. Esta observación comprueba señales de la interfaz, no confirma la persistencia del mensaje en el servidor y no supervisa toda una respuesta larga.
+Después del único clic, el script observa sin mostrar panel mientras haya señales de actividad. **No exige una respuesta en 30 segundos**: ese plazo solo muestra E31 si no se ha observado ninguna señal de inicio. La preparación y el clic no se retrasan por este seguimiento.
 
-No modifica `fetch`, no intercepta peticiones y no recarga ni pulsa Retry automáticamente. Una acción manual o una navegación interrumpe la observación. El diagnóstico recoge el resultado y una categoría de ruta, nunca el identificador de conversación. Esta corrección evita falsas confirmaciones, pero no identifica ni repara por sí sola la causa de una petición de red fallida.
+Una respuesta visible finaliza el seguimiento en silencio. Un error visible, como `Failed to fetch`, muestra E32 incluso cuando aparece después de los 30 segundos iniciales. El seguimiento se limita a 10 minutos: si hubo actividad pero no se reconoce una respuesta, termina silenciosamente y registra **sin confirmar**, sin inventar un éxito ni un fallo. Ese límite tampoco detiene ChatGPT. No supervisa toda la respuesta después de reconocer su primer contenido.
+
+El respaldo de comprobación posterior al clic es de un segundo; los cambios DOM pueden despertar antes la espera. Los observadores y listeners se liberan al finalizar. Una navegación hacia otra conversación o una acción manual interrumpe el seguimiento. No modifica `fetch`, no intercepta peticiones, no recarga ni pulsa Retry automáticamente.
+
+El diagnóstico añade las señales observadas (generación, mensaje visible, editor y categoría de ruta), sin incluir el prompt ni el identificador del chat. Esta comprobación no determina por sí sola la causa de un fallo de red ni garantiza reconocer todas las variantes de la interfaz.
 
 ## Diagnóstico
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.9
+// @version      1.3.10
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.9';
+  const VERSION = '1.3.10';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -71,6 +71,7 @@
   let stoppedSnapshot = '';
   let readinessResets = 0;
   let sendOutcome = 'sin iniciar';
+  let lastSendSignals = '';
   const trace = [];
   const record = message => {
     trace.push(new Date().toISOString().slice(11, 19) + ' ' + String(message).slice(0, 700));
@@ -213,6 +214,7 @@
       'URL actual: ' + queryStatus().summary,
       'Ruta actual: ' + routeKind(),
       'Resultado del envío: ' + sendOutcome,
+      'Señales después del clic: ' + (lastSendSignals || '(sin observar)'),
       'Último estado de preparación: ' + (lastReadiness || '(sin evaluar)'),
       'Estado al detenerse: ' + (stoppedSnapshot || '(no detenido)'),
       'Reinicios de estabilidad: ' + readinessResets,
@@ -925,6 +927,26 @@
     }) || null;
   }
 
+  function readSendProgress() {
+    // Señales de actividad de la interfaz, NO confirmación del servidor.
+    // No usar ACTIVITY a secas: también contiene burbujas históricas y nodos ocultos.
+    const anyVisible = selector => [...document.querySelectorAll(selector)].some(node =>
+      visible(node) && node.getAttribute('data-stop-generating') !== 'false');
+    const generating = anyVisible('button[data-testid="stop-button"], button[data-stop-generating], ' +
+      'button[aria-label="Stop generating"], button[aria-label="Detener generación"], ' +
+      'form[data-chatgpt-composer] button[aria-label="Stop"], form[data-chatgpt-composer] button[aria-label="Detener"]');
+    const message = anyVisible('[data-user-message-bubble="true"], [data-message-author-role="user"], [data-message-role="user"]');
+    const input = editor();
+    const cleared = Boolean(input && !normalize(textOf(input)));
+    const route = routeKind();
+    const conversation = route === 'conversación' || route === 'conversación local';
+    const active = generating || message || (conversation && cleared);
+    const summary = 'generación=' + (generating ? 'activa en interfaz' : 'no observada') +
+      '; mensaje=' + (message ? 'visible' : 'no observado') +
+      '; editor=' + (cleared ? 'vacío' : 'no vacío o ausente') + '; ruta=' + route;
+    return { active, generating, summary };
+  }
+
   async function observeSendOutcome() {
     // No modificar fetch, peticiones, tokens ni el historial. Solo observar el DOM.
     // Una burbuja local o un botón Stop NO demuestran que el servidor respondió.
@@ -939,16 +961,47 @@
     document.addEventListener('pointerdown', onManualAction, true);
     document.addEventListener('beforeinput', onManualAction, true);
     sendOutcome = 'pendiente';
-    let outcome;
+    const observationStarted = Date.now();
+    const noActivityDeadline = observationStarted + 30_000;
+    const observationDeadline = observationStarted + 10 * 60_000;
+    let outcome, sawActivity = false, observedPath = location.pathname;
     try {
-      outcome = await waitForValue(() => {
-        if (interrupted) return { kind: 'interrupted' };
+      while (true) {
+        // Permitir la transición inicial raíz -> local -> conversación, pero no
+        // atribuir a este envío la respuesta de otra conversación abierta después.
+        const path = location.pathname;
+        if (path !== observedPath) {
+          const nextIsConversation = /^\/c\/[^/]+\/?$/.test(path);
+          const wasLocal = /^\/c\/local-chatgpt(?:%3a|:)/i.test(observedPath);
+          const nowLocal = /^\/c\/local-chatgpt(?:%3a|:)/i.test(path);
+          if (!(observedPath === '/' && nextIsConversation) &&
+              !(wasLocal && nextIsConversation && !nowLocal)) interrupted = true;
+          observedPath = path;
+        }
+        if (interrupted) { outcome = { kind: 'interrupted' }; break; }
         const error = readSendError();
-        if (error) return { kind: 'error', error };
-        if (visibleResponse()) return { kind: 'response' };
-        if (document.querySelector(ACTIVITY)) sendOutcome = 'actividad local, sin respuesta confirmada';
-        return null;
-      }, 30_000, 0, false);
+        if (error) { outcome = { kind: 'error', error }; break; }
+        if (visibleResponse()) { outcome = { kind: 'response' }; break; }
+        const progress = readSendProgress();
+        if (progress.summary !== lastSendSignals) {
+          lastSendSignals = progress.summary;
+          record('Seguimiento envío: ' + lastSendSignals);
+        }
+        sawActivity ||= progress.active;
+        sendOutcome = progress.generating ? 'generación en curso en la interfaz; respuesta pendiente' :
+          progress.active ? 'actividad en interfaz; respuesta pendiente' :
+          sawActivity ? 'actividad previa; respuesta no observada' : 'pendiente, sin actividad observada';
+        const now = Date.now();
+        // 30 s es un límite para la ausencia de CUALQUIER señal de inicio,
+        // no un plazo para terminar un razonamiento ni una respuesta larga.
+        if (!sawActivity && now >= noActivityDeadline) { outcome = { kind: 'no-activity' }; break; }
+        if (sawActivity && now >= noActivityDeadline) phase = 'Respuesta pendiente';
+        if (now >= observationDeadline) { outcome = { kind: 'pending' }; break; }
+        // Respaldo de 1 s tras el clic; cambios DOM despiertan antes. No altera
+        // las ventanas rápidas de preparación ni mantiene observadores indefinidos.
+        await waitForChange(Math.max(1, Math.min(1_000, observationDeadline - now,
+          sawActivity ? Infinity : noActivityDeadline - now)));
+      }
     } finally {
       window.removeEventListener('pagehide', stop);
       window.removeEventListener('popstate', stop);
@@ -976,11 +1029,17 @@
       document.getElementById(STATUS_ID)?.remove();
       return;
     }
-    sendOutcome = 'sin confirmar: no se observó contenido de respuesta en 30 s';
+    if (outcome?.kind === 'pending') {
+      sendOutcome = 'sin confirmar: hubo actividad, pero no se observó respuesta durante 10 min';
+      phase = 'Seguimiento finalizado sin confirmar';
+      record('Fin del seguimiento limitado, sin aviso ni reenvío. La interfaz puede seguir trabajando.');
+      return;
+    }
+    sendOutcome = 'sin confirmar: no se observaron señales de inicio en 30 s';
     phase = 'Envío sin confirmar';
     captureStop();
-    notify('E31: Se pulsó Enviar, pero aún no observo una respuesta tras 30 s.\n' +
-      'Puede seguir pensando: esto no confirma un fallo. No reintento para evitar duplicados.\n' +
+    notify('E31: Se pulsó Enviar, pero no observo señales de inicio tras 30 s.\n' +
+      'No se ha confirmado el envío; no reintento para evitar duplicados.\n' +
       'Usa «Copiar diagnóstico».', true);
   }
 

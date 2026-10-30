@@ -17,6 +17,14 @@ function readyComposer(nextUrl, options = {}) {
   let panelVisible = false, removals = 0, createdPanels = 0;
   let statusPanel = null;
   const pendingPanels = [], statuses = [], clipboard = [];
+  const documentListeners = new Map(), windowListeners = new Map();
+  const listeners = map => ({
+    addEventListener(type, callback) {
+      if (!map.has(type)) map.set(type, new Set());
+      map.get(type).add(callback);
+    },
+    removeEventListener(type, callback) { map.get(type)?.delete(callback); }
+  });
   // DOM doubles only: the real notify() creates, updates and removes this UI.
   function uiNode(tag) {
     const attrs = {}, children = [], listeners = {};
@@ -104,6 +112,10 @@ function readyComposer(nextUrl, options = {}) {
     element.dispatchEvent = event => { keyEvent(event, element); return true; };
   }
   reflectLevel();
+  const userBubble = node({ 'data-message-author-role': 'user' });
+  const stopButton = node({ 'data-testid': 'stop-button' });
+  if (options.hiddenBubble) userBubble.getClientRects = () => [];
+  if (options.hiddenStop) stopButton.getClientRects = () => [];
   const reply = node({});
   reply.innerText = 'Fixture response';
   const errorBanner = node({ role: 'alert' });
@@ -117,7 +129,7 @@ function readyComposer(nextUrl, options = {}) {
     createRange: () => ({ selectNodeContents() {} }),
     execCommand(_command, _showUI, text) { fallbackEdits++; input.innerText = text; return true; },
     readyState: 'complete',
-    addEventListener() {}, removeEventListener() {},
+    ...listeners(documentListeners),
     getElementById: id => id === 'power-status' ? announcement :
       id === 'cgpt-q-extra-high-v131-status' && panelVisible ? statusPanel : null,
     querySelector: selector => {
@@ -135,8 +147,16 @@ function readyComposer(nextUrl, options = {}) {
         return sends && options.errorAt !== undefined && now >= sentAt + options.errorAt ? [errorBanner] : [];
       }
       if (selector.includes('[data-message-author-role="assistant"]')) {
-        return sends && options.acknowledge !== false && !options.optimisticOnly &&
-          now >= sentAt + (options.responseDelay ?? options.delay ?? 0) ? [reply] : [];
+        const ready = sends && options.acknowledge !== false && !options.optimisticOnly &&
+          now >= sentAt + (options.responseDelay ?? options.delay ?? 0);
+        if (sends && !ready) pendingPanels.push(panelVisible);
+        return ready ? [reply] : [];
+      }
+      if (selector.includes('button[data-testid="stop-button"]')) {
+        return sends && options.stopUntil !== undefined && now < sentAt + options.stopUntil ? [stopButton] : [];
+      }
+      if (selector.includes('[data-user-message-bubble="true"]')) {
+        return sends && options.acknowledge !== false && !options.noBubble ? [userBubble] : [];
       }
       if (selector.includes('data-composer-markdown')) return [input];
       if (selector.includes('[role="menu"]')) return menuOpen ? [menu] : [];
@@ -145,7 +165,7 @@ function readyComposer(nextUrl, options = {}) {
       return [];
     }
   };
-  const window = { addEventListener() {}, removeEventListener() {} };
+  const window = { ...listeners(windowListeners) };
   window.self = window.top = window;
   window.getSelection = () => ({ removeAllRanges() {}, addRange() {} });
   const history = { state: null, replaceState: (_state, _title, value) => {
@@ -168,7 +188,10 @@ function readyComposer(nextUrl, options = {}) {
         changed = true;
         location.href = new URL(nextUrl, location).href;
       }
-      options.onTick?.({ now, input, trigger, send, document, form, phase: context.getPhase() });
+      options.onTick?.({ now, input, trigger, send, document, form, phase: context.getPhase(),
+        emitDocument(type, event) { for (const callback of [...(documentListeners.get(type) || [])]) callback(event); },
+        emitWindow(type) { for (const callback of [...(windowListeners.get(type) || [])]) callback({ type }); }
+      });
       queueMicrotask(callback);
     }
   });
@@ -181,6 +204,9 @@ function readyComposer(nextUrl, options = {}) {
     diagnostic: context.report, notify: context.sendNotice, clipboard, errorBanner, reply,
     isExtraHigh: context.checkEffort, interact: context.interact,
     async copyDiagnostic() { await statusPanel.querySelector('button').listeners.click(); },
+    get listenerCount() {
+      return [...documentListeners.values(), ...windowListeners.values()].reduce((n, set) => n + set.size, 0);
+    },
     get createdPanels() { return createdPanels; },
     get phase() { return context.getPhase(); },
     get panelVisible() { return panelVisible; },

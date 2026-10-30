@@ -50,7 +50,7 @@ test('successful send never creates a panel, not even transiently', async () => 
 test('waiting for delayed acknowledgement remains silent', async () => {
   const page = readyComposer(null, { delay: 600 });
   await page.run();
-  assert.ok(page.pendingPanels.length >= 3);
+  assert.ok(page.pendingPanels.length >= 1);
   assert.ok(page.pendingPanels.every(visible => !visible));
   assert.equal(page.createdPanels, 0);
   assert.equal(page.panelVisible, false);
