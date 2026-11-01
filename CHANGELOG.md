@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.11 - 2026-11-01
+
+- Añade detección del botón de razonamiento de la interfaz clásica en el mismo compositor.
+- Conserva la prioridad y el comportamiento de todos los selectores de la interfaz nueva.
+- Exige una etiqueta de nivel completa y un candidato único; descarta adjuntos, controles ocultos y otros formularios.
+- Mantiene sin cambios el resto de la lógica de ejecución, verificado mediante una comparación con v1.3.10.
+- Conserva el envío único, las esperas rápidas, el autoupdate y los avisos solo ante problemas.
+- Pruebas de regresión para ambos diseños y menús de selección; no se publica HTML privado.
+
 ## 1.3.10 - 2026-10-30
 
 - Evita E31 por falta de respuesta a los 30 segundos cuando ya hay actividad visible.

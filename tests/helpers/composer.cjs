@@ -198,11 +198,11 @@ function readyComposer(nextUrl, options = {}) {
   vm.runInContext(source.slice(0, seam) +
     '\n  globalThis.sendNotice = notify;\n  globalThis.run = main;\n' +
     '  globalThis.getPhase = () => phase;\n  globalThis.report = diagnostic;\n' +
-    '  globalThis.checkEffort = isExtraHigh;\n  globalThis.interact = onInteraction;\n})();', context);
+    '  globalThis.checkEffort = isExtraHigh;\n  globalThis.findEffort = effort;\n  globalThis.interact = onInteraction;\n})();', context);
   return {
     run: context.run, statuses, location, input, send, trigger, pendingPanels,
     diagnostic: context.report, notify: context.sendNotice, clipboard, errorBanner, reply,
-    isExtraHigh: context.checkEffort, interact: context.interact,
+    isExtraHigh: context.checkEffort, findEffort: context.findEffort, interact: context.interact, document, form,
     async copyDiagnostic() { await statusPanel.querySelector('button').listeners.click(); },
     get listenerCount() {
       return [...documentListeners.values(), ...windowListeners.values()].reduce((n, set) => n + set.size, 0);

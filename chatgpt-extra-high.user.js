@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.10
+// @version      1.3.11
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.10';
+  const VERSION = '1.3.11';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -119,7 +119,7 @@
     const fallback = 'button[aria-haspopup="menu"][aria-label="Select ChatGPT model"], ' +
       'button[data-testid="model-switcher-dropdown-button"]';
     return (form && [...form.querySelectorAll(fallback)].find(painted)) ||
-      [...document.querySelectorAll(fallback)].find(painted);
+      [...document.querySelectorAll(fallback)].find(painted) || legacyEffortTrigger(form);
   };
   // Un trigger puede contener etiquetas de medición para TODOS los niveles.
   // Leer solo sus descendientes visibles, sin heredar aria-hidden del fondo modal.
@@ -148,6 +148,23 @@
     const preferred = trigger?.querySelector('[class*="ModelPickerTriggerLabel-"], [data-testid="model-switcher-label"]');
     return selectedLabelText(preferred || trigger);
   };
+
+  function legacyEffortTrigger(form) {
+    // Compatibilidad adicional con la interfaz clásica. Los selectores de la
+    // interfaz nueva y los respaldos existentes conservan toda su prioridad.
+    if (!form?.matches?.('form[data-type="unified-composer"]')) return null;
+    const candidates = [...form.querySelectorAll(
+      '[data-composer-transition-slot="trailing"] button[aria-haspopup="menu"]'
+    )].filter(node => {
+      if (!painted(node) || node.closest('form') !== form) return false;
+      // Solo un nombre de nivel completo. No buscar una coincidencia parcial
+      // entre adjuntos, modelos o listas ocultas de opciones de medición.
+      const label = selectedLabelText(node).toLowerCase().replace(/[-\s]+/g, ' ');
+      const levels = levelNames(label);
+      return levels.length === 1 && levels[0] === label;
+    });
+    return candidates.length === 1 ? candidates[0] : null;
+  }
 
   function isExtraHigh() {
     const trigger = effort();

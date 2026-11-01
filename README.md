@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.10.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.11.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -43,6 +43,14 @@ https://chatgpt.com/?q=Explica%20la%20diferencia%20entre%20QNH%20y%20QFE
 ```
 
 Si ambos parámetros contienen texto válido, `q` tiene prioridad. Una consulta vacía o el marcador literal `%s` no inicia la automatización. Solo se activa en la ruta `/`, no en conversaciones `/c/...` ya abiertas.
+
+## Compatibilidad de interfaces
+
+La versión 1.3.11 admite tanto la interfaz nueva como la clásica. Mantiene los selectores explícitos de la interfaz nueva y los respaldos existentes con la misma prioridad. Solo si no encuentra ninguno, busca en el mismo `form[data-type="unified-composer"]` un único botón de menú situado en `data-composer-transition-slot="trailing"` cuya etiqueta visible sea exactamente un nivel de razonamiento.
+
+Este respaldo reconoce el botón clásico aunque no tenga `aria-label` ni `data-selected-reasoning-effort`. No interpreta una lista de opciones como una selección, no elige entre varios candidatos y no busca en otros formularios ni en el menú de adjuntos. Detectar Medium, High, Max o Pro no confirma Extra High: la validación final sigue siendo la misma.
+
+No fuerza una interfaz u otra, no modifica el script Always Classic y no cambia la inserción de texto, la selección del nivel, la ventana final de envío, la cancelación manual ni la observación de respuestas largas. Las pruebas incluyen ambas variantes; la validación de navegador utiliza controles y menús de prueba aislados, no una sesión autenticada real.
 
 ## Funcionamiento
 
