@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         ChatGPT - Always Classic
 // @namespace    local.chatgpt.always-classic
-// @version      1.0.1
+// @version      1.0.2
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend/tree/main/chatgpt-always-classic
 // @updateURL    https://raw.githubusercontent.com/alexx-ftw/chatgpt-extra-high-autosend/main/chatgpt-always-classic/chatgpt-always-classic.user.js
 // @downloadURL  https://raw.githubusercontent.com/alexx-ftw/chatgpt-extra-high-autosend/main/chatgpt-always-classic/chatgpt-always-classic.user.js
-// @description  Add oauth_return_surface=classic to every ChatGPT page and retain it during navigation.
+// @description  Add oauth_return_surface=classic to ChatGPT pages except Dots, including during navigation.
 // @match        *://chatgpt.com/*
 // @run-at       document-start
 // @grant        none
@@ -27,8 +27,19 @@
         if (url.origin !== location.origin) return null;
 
         const values = url.searchParams.getAll(parameter);
-        if (values.length === 1 && values[0] === 'classic') return null;
 
+        // Dots must retain its own surface, including during in-page navigation.
+        if (url.pathname === '/dots' || url.pathname.startsWith('/dots/')) {
+            if (!values.includes('classic')) return null;
+
+            url.searchParams.delete(parameter);
+            for (const value of values) {
+                if (value !== 'classic') url.searchParams.append(parameter, value);
+            }
+            return url.href;
+        }
+
+        if (values.length === 1 && values[0] === 'classic') return null;
         url.searchParams.set(parameter, 'classic');
         return url.href;
     }

@@ -1,6 +1,6 @@
 # ChatGPT - Always Classic
 
-Version **1.0.1**. A userscript for Tampermonkey and Violentmonkey that adds `oauth_return_surface=classic` to pages on `chatgpt.com` and retains it during navigation.
+Version **1.0.2**. A userscript for Tampermonkey and Violentmonkey that adds `oauth_return_surface=classic` to pages on `chatgpt.com`, except Dots (`/dots` and `/dots/*`), and retains the appropriate URL during navigation.
 
 ## Install or upgrade
 
@@ -20,14 +20,22 @@ To publish an update, increase `@version`, update the `.user.js` file and its id
 
 ## Behavior
 
-- Applies to every path on the exact `chatgpt.com` host.
-- Adds or replaces `oauth_return_surface` with a single `classic` value.
+- Adds or replaces `oauth_return_surface` with a single `classic` value on the exact `chatgpt.com` host, except `/dots` and its subroutes.
+- On Dots, removes any `classic` value already present while preserving other `oauth_return_surface` values. This includes `https://chatgpt.com/dots/home`.
+- Keeps the navigation hooks active on Dots so entering and leaving it within the same tab applies the appropriate rule.
 - Preserves other query parameter values and URL fragments.
 - Loads the initial corrected URL so the server can receive the parameter.
 - Retains the parameter during History API navigation, Back/Forward, and fragment changes.
 - Uses a short session-storage redirect guard if the server strips the parameter repeatedly. If storage is blocked, that guard is unavailable.
 
 The script controls the URL parameter; ChatGPT determines what effect that parameter has on its interface.
+
+## Changes in 1.0.2
+
+- Exclude `/dots` and all its subroutes from classic-surface enforcement.
+- Remove stale `classic` values on Dots during direct loading and in-page navigation.
+- Preserve any other surface values explicitly supplied for Dots.
+- Keep automatic-update URLs unchanged.
 
 ## Changes in 1.0.1
 
