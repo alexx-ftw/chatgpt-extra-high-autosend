@@ -1,6 +1,6 @@
 # ChatGPT - Always Classic
 
-Version **1.0.3**. A userscript for Tampermonkey and Violentmonkey that adds `oauth_return_surface=classic` to pages on `chatgpt.com`, except Dots (`/dots` and `/dots/*`), and retains the appropriate URL during navigation. A visible **Clásico ON/OFF** switch lets you change and save the preference.
+Version **1.0.4**. A userscript for Tampermonkey and Violentmonkey that adds `oauth_return_surface=classic` to pages on `chatgpt.com`, except Dots (`/dots` and `/dots/*`), and retains the appropriate URL during navigation. A command in the **Violentmonkey menu** lets you change and save the preference.
 
 ## Install or upgrade
 
@@ -12,17 +12,20 @@ If you already installed version 1.0.0, install this version once or replace the
 
 If the JavaScript install link does not open your userscript manager, open the plain-text copy, paste all its contents into the manager, and save. Reload ChatGPT after installation.
 
-## Toggle
+## Toggle in Violentmonkey
 
-Use the **Clásico ON/OFF** switch in the bottom-right corner of ChatGPT.
+Open ChatGPT, click the **Violentmonkey extension icon**, and open the commands for **ChatGPT - Always Classic**. The command displays the saved state and the action:
 
-- **ON** is the default and keeps `oauth_return_surface=classic` outside Dots.
-- **OFF** removes only the `classic` value and stops adding it during navigation.
-- Clicking the switch saves the preference in this browser and reloads the current non-Dots tab to apply it.
-- On Dots, the switch shows **Dots excluido**. It changes the preference for other ChatGPT pages without reloading Dots or adding `classic` there.
-- The button supports keyboard activation and exposes its ON/OFF state to assistive technology.
-- Other open tabs synchronize the setting and URL without a forced reload. If their saved preference changes, they display **Recarga para aplicar** until reloaded.
-- If the browser blocks saving the preference, the switch keeps its previous state and shows an error instead of reloading into an unsaved setting.
+- **Modo clásico: ON (desactivar)** turns classic mode off.
+- **Modo clásico: OFF (activar)** turns classic mode on.
+
+The script adds no button, panel, or styles to the page. After upgrading from version 1.0.3, reload open ChatGPT tabs to remove the old floating control and register the menu command.
+
+ON is the default and keeps `oauth_return_surface=classic` outside Dots. OFF removes only the `classic` value and stops adding it during navigation. Selecting the command saves the preference and reloads the current non-Dots tab.
+
+On Dots, the command includes **Dots excluido**. It changes the saved preference for other ChatGPT pages without reloading Dots or adding `classic` there.
+
+Existing preferences from version 1.0.3 are preserved. Other open tabs synchronize the preference and URL without a forced reload; their menu command can show **Recarga para aplicar**. If saving fails, the previous state remains active and the menu command reports the error.
 
 The saved preference uses local storage. Clearing ChatGPT site data resets it to ON, and private browsing stores it only for that private session.
 
@@ -44,6 +47,13 @@ To publish an update, increase `@version`, update the `.user.js` file and its id
 - Uses a short session-storage redirect guard if the server strips the parameter repeatedly. If storage is blocked, that guard is unavailable.
 
 The script controls the URL parameter; ChatGPT determines what effect that parameter has on its interface.
+
+## Changes in 1.0.4
+
+- Move the ON/OFF toggle into the userscript-manager menu.
+- Remove the floating page control and all its DOM and CSS code.
+- Preserve existing preferences, Dots exclusions, and automatic-update URLs.
+- Keep SPA interception attached to the actual page History object after adding menu API grants.
 
 ## Changes in 1.0.3
 
@@ -71,4 +81,4 @@ The script controls the URL parameter; ChatGPT determines what effect that param
 - [Tampermonkey update metadata](https://www.tampermonkey.net/documentation.php?locale=en&q=update_url)
 - [Violentmonkey metadata](https://violentmonkey.github.io/api/metadata-block/)
 - [Browser local storage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
-- [Accessible switch pattern](https://www.w3.org/WAI/ARIA/apg/patterns/switch/)
+- [Violentmonkey menu commands and sandbox APIs](https://violentmonkey.github.io/api/gm/#gm_registermenucommand)
