@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - Always Classic
 // @namespace    local.chatgpt.always-classic
-// @version      1.0.4
+// @version      1.0.5
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend/tree/main/chatgpt-always-classic
 // @updateURL    https://raw.githubusercontent.com/alexx-ftw/chatgpt-extra-high-autosend/main/chatgpt-always-classic/chatgpt-always-classic.user.js
 // @downloadURL  https://raw.githubusercontent.com/alexx-ftw/chatgpt-extra-high-autosend/main/chatgpt-always-classic/chatgpt-always-classic.user.js
@@ -9,10 +9,8 @@
 // @match        *://chatgpt.com/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
-// @grant        GM_unregisterMenuCommand
-// @grant        unsafeWindow
-// @sandbox      raw
-// @inject-into  page
+// @sandbox      DOM
+// @inject-into  content
 // @noframes
 // ==/UserScript==
 
@@ -22,14 +20,19 @@
     const parameter = 'oauth_return_surface';
     const redirectKey = 'userscript:chatgpt-always-classic:redirect';
     const preferenceKey = 'userscript:chatgpt-always-classic:enabled';
-    // Grants enable sandboxing; intercept the actual page's History object.
-    const pageHistory = unsafeWindow.history;
-    const originalReplaceState = pageHistory.replaceState;
+    // The menu and URL handling run in the extension's isolated context.
+    // No page-world bridge or access to ChatGPT's JavaScript is required.
+    const browserHistory = window.history;
+    const originalReplaceState = browserHistory.replaceState;
+    const menuCommandId = 'chatgpt-always-classic-toggle';
     let enabled = readPreference();
-    let menuId = null;
+    let supportsMenuUpdates = null;
     let menuLabel = '';
     let navigating = false;
     let statusMessage = '';
+    let correctingURL = false;
+    let checkQueued = false;
+    let lastURL = location.href;
 
     // Return a corrected URL, or null when no correction is needed.
     function classicURL(value, base = location.href) {
@@ -54,7 +57,6 @@
         return url.href;
     }
 
-
     function readPreference(fallback = true) {
         try {
             return localStorage.getItem(preferenceKey) !== 'off';
@@ -68,6 +70,15 @@
     }
 
     function updateMenu() {
+        if (supportsMenuUpdates === null) {
+            // Older managers keep one neutral caption instead of stale ON/OFF text.
+            const id = GM_registerMenuCommand('Alternar modo clásico', toggleClassic, {
+                id: menuCommandId,
+            });
+            supportsMenuUpdates = id === menuCommandId;
+        }
+        if (!supportsMenuUpdates) return;
+
         const state = enabled ? 'ON' : 'OFF';
         const action = enabled ? 'desactivar' : 'activar';
         const message = isDots() && statusMessage === 'Recarga para aplicar'
@@ -77,9 +88,9 @@
         const label = 'Modo clásico: ' + state + ' (' + action + ')' +
             (suffix ? ' · ' + suffix : '');
 
-        if (menuId !== null && menuLabel === label) return;
-        if (menuId !== null) GM_unregisterMenuCommand(menuId);
-        menuId = GM_registerMenuCommand(label, toggleClassic);
+        if (menuLabel === label) return;
+        // Keep the callback registered under the same ID while its caption changes.
+        GM_registerMenuCommand(label, toggleClassic, { id: menuCommandId });
         menuLabel = label;
     }
 
@@ -123,13 +134,29 @@
     }
 
     function keepParameter() {
-        const corrected = classicURL(location.href);
-        if (corrected) {
-            Reflect.apply(originalReplaceState, pageHistory, [
-                pageHistory.state, '', corrected,
-            ]);
+        if (correctingURL || navigating) return;
+        correctingURL = true;
+        try {
+            const corrected = classicURL(location.href);
+            if (corrected) {
+                Reflect.apply(originalReplaceState, browserHistory, [
+                    browserHistory.state, '', corrected,
+                ]);
+            }
+            lastURL = location.href;
+        } finally {
+            correctingURL = false;
         }
         updateMenu();
+    }
+
+    function scheduleParameterCheck() {
+        if (correctingURL || checkQueued || navigating) return;
+        checkQueued = true;
+        queueMicrotask(() => {
+            checkQueued = false;
+            keepParameter();
+        });
     }
 
     // Register before any redirect; the toggle also works on Dots.
@@ -167,23 +194,17 @@
         }
     }
 
-    // ChatGPT can change routes without loading a new document.
-    for (const method of ['pushState', 'replaceState']) {
-        const original = pageHistory[method];
-        pageHistory[method] = function (...args) {
-            if (args.length >= 3 && args[2] != null) {
-                try {
-                    const corrected = classicURL(args[2], document.baseURI);
-                    if (corrected) args[2] = corrected;
-                } catch {
-                    // Let the native method handle invalid input normally.
-                }
-            }
-            const result = Reflect.apply(original, this, args);
-            updateMenu();
-            return result;
-        };
+    // Observe actual document navigation without patching page-world methods.
+    // Queue the correction so the site's current navigation can finish first.
+    if (typeof window.navigation?.addEventListener === 'function') {
+        window.navigation.addEventListener('currententrychange', scheduleParameterCheck);
     }
+
+    // Fallback for browsers without Navigation API. No DOM scans or URL parsing
+    // occur while the URL is unchanged. Background timers may be throttled.
+    window.setInterval(() => {
+        if (location.href !== lastURL) keepParameter();
+    }, 250);
 
     window.addEventListener('popstate', keepParameter);
     window.addEventListener('pageshow', () => {
@@ -191,8 +212,11 @@
         syncPreference();
     });
     window.addEventListener('hashchange', keepParameter);
+    window.addEventListener('focus', syncPreference);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') syncPreference();
+    });
     window.addEventListener('storage', event => {
         if (event.key === preferenceKey || event.key === null) syncPreference();
     });
-
 })();
