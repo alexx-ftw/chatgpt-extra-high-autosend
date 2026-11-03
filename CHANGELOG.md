@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.12 - 2026-11-03
+
+- Añade editores alternativos solo dentro de un compositor identificado, sin desplazar los selectores existentes.
+- Exige un candidato único y descarta campos ocultos, de solo lectura, diálogos y buscadores.
+- Mantiene la cancelación por edición manual también en los editores alternativos.
+- Sustituye el aviso genérico de inicio de sesión por E11 con diagnóstico categórico de arranque.
+- Separa el estado al detenerse del estado observado al copiar, sin guardar HTML ni contenidos privados.
+- Conserva Extra High, el envío único, las esperas rápidas, el seguimiento posterior y el autoupdate.
+- La causa concreta del registro con cero editores sigue sin confirmarse en la sesión real.
+
 ## 1.3.11 - 2026-11-01
 
 - Añade detección del botón de razonamiento de la interfaz clásica en el mismo compositor.

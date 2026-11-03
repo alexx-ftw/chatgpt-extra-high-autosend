@@ -130,18 +130,21 @@ test('original named model selector still wins before the legacy fallback', () =
   assert.equal(page.findEffort(), named);
 });
 
-test('all previous runtime stays identical except the appended legacy discovery fallback', () => {
+test('effort selection and post-send behavior remain identical to v1.3.11', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const { execFileSync } = require('node:child_process');
   const root = path.join(__dirname, '..');
   const current = fs.readFileSync(path.join(root, 'chatgpt-extra-high.user.js'), 'utf8');
-  const previous = execFileSync('git', ['show', 'v1.3.10:chatgpt-extra-high.user.js'], { cwd: root, encoding: 'utf8' });
-  const normalize = text => text.split('// ==/UserScript==')[1].replace(/const VERSION = '[^']+';/, "const VERSION = 'VERSION';");
-  const start = current.indexOf('  function legacyEffortTrigger(form) {');
-  const end = current.indexOf('  function isExtraHigh() {', start);
-  assert.ok(start > 0 && end > start);
-  const withoutFallback = (current.slice(0, start) + current.slice(end))
-    .replace('.find(painted) || legacyEffortTrigger(form);', '.find(painted);');
-  assert.equal(normalize(withoutFallback), normalize(previous));
+  const previous = execFileSync('git', ['show', 'v1.3.11:chatgpt-extra-high.user.js'], { cwd: root, encoding: 'utf8' });
+  const extract = (text, name) => {
+    const match = new RegExp('  (?:async )?function ' + name + '[(]').exec(text);
+    assert.ok(match, name);
+    const end = text.indexOf('\n  }\n', match.index);
+    return text.slice(match.index, end + 5);
+  };
+  for (const name of ['legacyEffortTrigger', 'isExtraHigh', 'selectExtraHigh', 'adjustPower',
+    'fillPrompt', 'waitForReadyToSend', 'consumeQuery', 'observeSendOutcome']) {
+    assert.equal(extract(current, name), extract(previous, name), name);
+  }
 });

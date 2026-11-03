@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.11.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.12.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -85,6 +85,18 @@ Una respuesta visible finaliza el seguimiento en silencio. Un error visible, com
 El respaldo de comprobación posterior al clic es de un segundo; los cambios DOM pueden despertar antes la espera. Los observadores y listeners se liberan al finalizar. Una navegación hacia otra conversación o una acción manual interrumpe el seguimiento. No modifica `fetch`, no intercepta peticiones, no recarga ni pulsa Retry automáticamente.
 
 El diagnóstico añade las señales observadas (generación, mensaje visible, editor y categoría de ruta), sin incluir el prompt ni el identificador del chat. Esta comprobación no determina por sí sola la causa de un fallo de red ni garantiza reconocer todas las variantes de la interfaz.
+
+## Arranque y detección del editor
+
+La versión 1.3.12 conserva la prioridad de `data-composer-markdown` y `#prompt-textarea`. Solo cuando no encuentra un editor principal visible busca un único editor alternativo dentro de un formulario de compositor identificado. Reconoce el textarea con `name="prompt-textarea"`, el textarea con `data-mobile-composer-prompt` y determinados editores ProseMirror o textbox del compositor. No busca cualquier textarea de la página ni utiliza campos ocultos, de solo lectura, diálogos, buscadores o un conjunto ambiguo. La compatibilidad de un editor alternativo no implica que todos los selectores de modelo de esa interfaz estén soportados: sigue siendo obligatorio confirmar Extra High.
+
+Un editor principal que aparece después conserva su prioridad. La espera de arranque sigue limitada a 90 segundos; no se añaden recargas ni reintentos automáticos después del límite, ni se extiende el tiempo hasta el clic en una interfaz ya preparada.
+
+Si no aparece un editor utilizable, E11 no atribuye el problema automáticamente al inicio de sesión. El diagnóstico añade estado del documento, visibilidad de pestaña, indicador de conexión del navegador, cantidades de compositores, campos principales, campos alternativos, editables visibles, marcos y controles de acceso visibles. El indicador online no demuestra conectividad con el servicio y un control de acceso visible no prueba el estado de autenticación. No inspecciona documentos internos de marcos.
+
+Se conservan por separado el estado al detenerse y el estado actual al copiar el informe. Son categorías y cantidades, sin HTML, títulos, contenido de formularios, URLs de marcos ni identificadores de cuenta. El panel de diagnóstico se excluye del recuento de editables.
+
+El registro que motivó esta revisión no demuestra por qué faltaban los controles: el HTML aportado contiene un `#prompt-textarea` ya reconocido por la versión anterior. Esta revisión corrige casos de detección de respaldo reproducidos y mejora el diagnóstico, pero no constituye una reparación verificada de aquella sesión.
 
 ## Diagnóstico
 

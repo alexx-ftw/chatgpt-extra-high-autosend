@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.11
+// @version      1.3.12
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.11';
+  const VERSION = '1.3.12';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -44,11 +44,18 @@
   const STATUS_ID = 'cgpt-q-extra-high-v131-status';
   const startedAt = Date.now();
   const deadline = startedAt + TIMEOUT_MS;
-  // El editor del HTML aportado NO tiene id="prompt-textarea".
-  // Usar su atributo propio evita confundirlo con buscadores u otros editores.
-  // Se mantienen los dos selectores antiguos por compatibilidad.
+  // Conservar las marcas originales de ambas interfaces. Los respaldos solo
+  // se consultan si no hay editor principal visible y dentro de un compositor.
   const EDITOR = '[data-composer-markdown][contenteditable="true"], ' +
     '#prompt-textarea[contenteditable="true"], textarea#prompt-textarea';
+  const COMPOSER = 'form[data-type="unified-composer"], form[data-chatgpt-composer], form[data-mobile-composer]';
+  const FALLBACK_EDITOR = COMPOSER.split(', ').flatMap(form => [
+    'textarea[name="prompt-textarea"]', 'textarea[data-mobile-composer-prompt]',
+    '.ProseMirror[contenteditable="true"]',
+    '[data-composer-body] [role="textbox"][contenteditable="true"]',
+    '[data-composer-editor-host] [role="textbox"][contenteditable="true"]',
+    '[data-composer-editor-host] [role="textbox"][contenteditable="plaintext-only"]'
+  ].map(selector => form + ' ' + selector)).join(', ');
   const EFFORT = 'button[data-composer-navigation-target="reasoning"], ' +
     'button[data-codex-intelligence-trigger="true"][data-selected-reasoning-effort]';
   const SEND = 'button[data-testid="send-button"], button[data-testid="composer-send-button"], ' +
@@ -72,6 +79,8 @@
   let readinessResets = 0;
   let sendOutcome = 'sin iniciar';
   let lastSendSignals = '';
+  let lastStartup = '';
+  let stoppedStartup = '';
   const trace = [];
   const record = message => {
     trace.push(new Date().toISOString().slice(11, 19) + ' ' + String(message).slice(0, 700));
@@ -110,11 +119,20 @@
   const enabled = node => visible(node) && !node.matches(':disabled') &&
     node.getAttribute('aria-disabled') !== 'true' && !node.hasAttribute('data-disabled');
   const first = (selector, root = document) => [...root.querySelectorAll(selector)].find(visible);
-  const editor = () => first(EDITOR);
+  function editorCandidates(predicate = visible) {
+    const exact = [...document.querySelectorAll(EDITOR)].filter(predicate);
+    if (exact.length) return exact;
+    const fallback = [...document.querySelectorAll(FALLBACK_EDITOR)].filter(node =>
+      predicate(node) && !node.readOnly && !node.hasAttribute('readonly') &&
+      node.getAttribute('aria-readonly') !== 'true' && !node.matches(':disabled') &&
+      !node.closest('dialog, [role="dialog"], [role="search"], [data-composer-transition-slot="leading"], [data-composer-transition-slot="trailing"]'));
+    return fallback.length === 1 ? fallback : [];
+  }
+  const editor = () => editorCandidates()[0];
   const effort = () => {
     const exact = [...document.querySelectorAll(EFFORT)].find(painted);
     if (exact) return exact;
-    const input = [...document.querySelectorAll(EDITOR)].find(painted);
+    const input = editorCandidates(painted)[0];
     const form = input?.closest('form');
     const fallback = 'button[aria-haspopup="menu"][aria-label="Select ChatGPT model"], ' +
       'button[data-testid="model-switcher-dropdown-button"]';
@@ -211,15 +229,65 @@
     return { input, trigger, text, target, open, button, summary };
   }
 
+  function editorKind(input) {
+    if (!input) return '(ninguno)';
+    const tag = input.tagName.toLowerCase();
+    if (input.hasAttribute('data-composer-markdown')) return tag + '[data-composer-markdown]';
+    if (input.id === 'prompt-textarea') return tag + '#prompt-textarea';
+    if (input.getAttribute('name') === 'prompt-textarea') return tag + '[name="prompt-textarea"]';
+    if (input.hasAttribute('data-mobile-composer-prompt')) return tag + '[data-mobile-composer-prompt]';
+    return tag + '[editor del compositor]';
+  }
+
+  function startupState() {
+    // Solo categorías y cantidades. No registrar HTML, títulos, URLs de marcos,
+    // valores del editor, etiquetas libres ni contenidos de otros formularios.
+    const known = [...document.querySelectorAll(EDITOR)];
+    const alternatives = known.some(painted) ? null : [...document.querySelectorAll(FALLBACK_EDITOR)];
+    const countVisible = selector => [...document.querySelectorAll(selector)]
+      .filter(node => visible(node) && !node.closest('#' + STATUS_ID)).length;
+    const summary = 'documento=' + document.readyState +
+      '; pestaña=' + (document.visibilityState || 'desconocida') +
+      '; conexión=' + (typeof globalThis.navigator?.onLine === 'boolean' ? (navigator.onLine ? 'online' : 'offline') : 'desconocida') +
+      '; compositores=' + document.querySelectorAll(COMPOSER).length +
+      '; editores principales=' + known.length +
+      '; principales visibles=' + known.filter(visible).length +
+      '; alternativos visibles=' + (alternatives ? alternatives.filter(visible).length : 'no evaluados') +
+      '; editables visibles=' + countVisible('textarea, [contenteditable="true"], [contenteditable="plaintext-only"]') +
+      '; marcos=' + document.querySelectorAll('iframe').length +
+      '; controles de acceso visibles=' + countVisible('[data-testid="login-button"], [data-login-button], a[href^="/auth/login"], a[href^="https://chatgpt.com/auth/login"]');
+    return summary;
+  }
+
+  async function waitForComposer() {
+    const ready = await waitForValue(() => {
+      const input = editor();
+      const available = (enabled(input) && input) ||
+        (effort()?.getAttribute('aria-expanded') === 'true' && menuScopes()[0]);
+      if (document.readyState !== 'loading' && available) return available;
+      const snapshot = startupState();
+      if (snapshot !== lastStartup) { lastStartup = snapshot; record('Arranque: ' + snapshot); }
+      return null;
+    }, TIMEOUT_MS);
+    if (ready) return ready;
+    lastStartup = startupState();
+    throw new Error('E11: No apareció un editor utilizable antes del límite de espera. ' +
+      'Puede faltar el compositor, seguir cargando o usar marcas no reconocidas. ' +
+      'No se ha enviado nada ni se ha recargado la página. Estado: ' + lastStartup);
+  }
+
   function captureStop() {
     if (stoppedSnapshot) return;
+    if (phase === '1/3 Texto') {
+      try { stoppedStartup = startupState(); } catch { /* Conservar el error original. */ }
+    }
     let summary = lastReadiness || 'estado no disponible';
     try { summary = readinessState().summary; } catch { /* No ocultar el error original. */ }
     stoppedSnapshot = new Date().toISOString().slice(11, 19) + ' ' + phase + '; ' + summary;
   }
 
   function diagnostic() {
-    const input = [...document.querySelectorAll(EDITOR)].find(painted);
+    const input = editorCandidates(painted)[0];
     const trigger = effort();
     const power = readPower();
     // No incluye el prompt, mensajes, cookies, tokens ni HTML de la página.
@@ -235,10 +303,11 @@
       'Último estado de preparación: ' + (lastReadiness || '(sin evaluar)'),
       'Estado al detenerse: ' + (stoppedSnapshot || '(no detenido)'),
       'Reinicios de estabilidad: ' + readinessResets,
+      'Arranque actual: ' + startupState(),
+      'Arranque al detenerse: ' + (stoppedStartup || '(no detenido en arranque)'),
       'Editor detectado: ' + Boolean(input),
       'Coincidencias del editor en DOM: ' + document.querySelectorAll(EDITOR).length,
-      'Tipo de editor: ' + (input ? (input.tagName.toLowerCase() +
-        (input.hasAttribute('data-composer-markdown') ? '[data-composer-markdown]' : '#prompt-textarea')) : '(ninguno)'),
+      'Tipo de editor: ' + editorKind(input),
       'Editor interactuable: ' + Boolean(input && enabled(input)),
       'Caracteres en editor: ' + (input ? textOf(input).length : 0),
       'Texto esperado coincide: ' + Boolean(input && matchesPrompt(input)),
@@ -313,7 +382,7 @@
         event.target?.closest?.('#' + STATUS_ID)) return;
     // No bloquear el texto. Escape cancela en cualquier sitio; las acciones
     // de edición cancelan únicamente si ocurren dentro del compositor.
-    const editing = event.target?.closest?.(EDITOR);
+    const editing = event.target?.closest?.(EDITOR + ', ' + FALLBACK_EDITOR);
     if (event.type === 'keydown' && event.key === 'Escape') {
       cancelled = 'Cancelado con Escape.';
     } else if (editing && event.type !== 'pointerdown' &&
@@ -1064,10 +1133,7 @@
     phase = '1/3 Texto';
     await waitFor(() => document.body, 'La página no terminó de cargar.');
     notify('Paso 1/3 · Cargando texto\nEscape cancela el autoenvío.');
-    await waitFor(() => document.readyState !== 'loading' &&
-      ((enabled(editor()) && editor()) ||
-       (effort()?.getAttribute('aria-expanded') === 'true' && menuScopes()[0])),
-      'No encuentro el editor. Comprueba que has iniciado sesión.', TIMEOUT_MS);
+    await waitForComposer();
     // Un menú previamente abierto puede ocultar el editor con aria-hidden.
     await closeEffortMenu(effort());
 
