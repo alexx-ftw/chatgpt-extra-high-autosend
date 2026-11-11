@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.13 - 2026-11-11
+
+- La confirmación tras cerrar Power usa el plazo global restante en vez de cortar a los 8 segundos.
+- Relee el botón actual y exige Extra High, un control habilitado y el menú cerrado; una desaparición o sustitución no cuenta como éxito.
+- Reinicia la ventana de confirmación al cambiar la identidad del botón.
+- Evita consultas con ID vacío cuando el selector aún no tiene un menú asociado.
+- Mantiene la validación final conjunta de texto, nivel y botón Enviar, sin añadir pausas fijas ni repetir clics.
+- Cancela si el borrador pasa a ser distinto; conserva Escape, navegación y cambios de consulta.
+- Registra el estado categórico de la confirmación, sin HTML, IDs ni etiquetas arbitrarias.
+- Conserva los selectores de ambas interfaces, el autoupdate y el script Always Classic sin cambios.
+- El fallo por confirmación tardía está reproducido en pruebas; la causa exacta de la transición en la sesión real no está determinada.
+
 ## 1.3.12 - 2026-11-03
 
 - Añade editores alternativos solo dentro de un compositor identificado, sin desplazar los selectores existentes.

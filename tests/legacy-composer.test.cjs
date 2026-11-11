@@ -130,7 +130,7 @@ test('original named model selector still wins before the legacy fallback', () =
   assert.equal(page.findEffort(), named);
 });
 
-test('effort selection and post-send behavior remain identical to v1.3.11', () => {
+test('legacy discovery, effort validation and post-send behavior stay identical to v1.3.11', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const { execFileSync } = require('node:child_process');
@@ -143,7 +143,7 @@ test('effort selection and post-send behavior remain identical to v1.3.11', () =
     const end = text.indexOf('\n  }\n', match.index);
     return text.slice(match.index, end + 5);
   };
-  for (const name of ['legacyEffortTrigger', 'isExtraHigh', 'selectExtraHigh', 'adjustPower',
+  for (const name of ['legacyEffortTrigger', 'isExtraHigh', 'adjustPower',
     'fillPrompt', 'waitForReadyToSend', 'consumeQuery', 'observeSendOutcome']) {
     assert.equal(extract(current, name), extract(previous, name), name);
   }

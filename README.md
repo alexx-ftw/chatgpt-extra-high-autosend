@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.12.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.13.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -97,6 +97,14 @@ Si no aparece un editor utilizable, E11 no atribuye el problema automáticamente
 Se conservan por separado el estado al detenerse y el estado actual al copiar el informe. Son categorías y cantidades, sin HTML, títulos, contenido de formularios, URLs de marcos ni identificadores de cuenta. El panel de diagnóstico se excluye del recuento de editables.
 
 El registro que motivó esta revisión no demuestra por qué faltaban los controles: el HTML aportado contiene un `#prompt-textarea` ya reconocido por la versión anterior. Esta revisión corrige casos de detección de respaldo reproducidos y mejora el diagnóstico, pero no constituye una reparación verificada de aquella sesión.
+
+## Confirmación del nivel tras cerrar Power
+
+Desde la versión 1.3.13, la confirmación posterior al cierre del menú no vence por separado a los 8 segundos. Utiliza el tiempo que quede del límite global de 90 segundos iniciado al cargar el script. No se añade una espera fija ni se reinicia ese límite.
+
+El botón se vuelve a localizar en cada comprobación: debe estar habilitado, confirmar Extra High y tener el menú cerrado. Si se sustituye durante el renderizado, la estabilidad se comprueba de nuevo sobre el nodo actual. La lectura previa de Extra High en el deslizador no sustituye a esta validación ni a la comprobación conjunta inmediatamente anterior al único clic en Enviar.
+
+La desaparición o un estado intermedio del selector no provoca reaperturas ni clics adicionales. Escape, una consulta distinta, navegación o un borrador diferente cancelan la espera. Una ejecución que ya se haya detenido no se reactiva porque el selector reaparezca después. El diagnóstico conserva **Confirmación del selector** con el último estado categórico observado.
 
 ## Diagnóstico
 

@@ -107,6 +107,8 @@ function readyComposer(nextUrl, options = {}) {
       level = Math.max(0, Math.min(4, level + (event.key === 'ArrowLeft' ? -1 : 1)));
     }
     reflectLevel();
+    options.onControlEvent?.({ event, now, input, trigger, send, form, document,
+      source: from === trigger ? 'trigger' : from === thumb ? 'thumb' : from === menu ? 'menu' : 'row' });
   }
   for (const element of [trigger, row, thumb, menu]) {
     element.dispatchEvent = event => { keyEvent(event, element); return true; };

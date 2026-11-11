@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.12
+// @version      1.3.13
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.12';
+  const VERSION = '1.3.13';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -79,6 +79,7 @@
   let readinessResets = 0;
   let sendOutcome = 'sin iniciar';
   let lastSendSignals = '';
+  let lastEffortConfirmation = '';
   let lastStartup = '';
   let stoppedStartup = '';
   const trace = [];
@@ -303,6 +304,7 @@
       'Último estado de preparación: ' + (lastReadiness || '(sin evaluar)'),
       'Estado al detenerse: ' + (stoppedSnapshot || '(no detenido)'),
       'Reinicios de estabilidad: ' + readinessResets,
+      'Confirmación del selector: ' + (lastEffortConfirmation || '(sin evaluar)'),
       'Arranque actual: ' + startupState(),
       'Arranque al detenerse: ' + (stoppedStartup || '(no detenido en arranque)'),
       'Editor detectado: ' + Boolean(input),
@@ -516,7 +518,8 @@
 
   function menuScopes() {
     const trigger = effort();
-    const controlled = document.getElementById(trigger?.getAttribute('aria-controls') || '');
+    const controlledId = trigger?.getAttribute('aria-controls');
+    const controlled = controlledId ? document.getElementById(controlledId) : null;
     if (visible(controlled)) return [controlled];
     const menus = [...document.querySelectorAll('[role="menu"], [role="listbox"], ' +
       '[role="dialog"][data-state="open"]')]
@@ -771,6 +774,43 @@
     }
   }
 
+  async function waitForEffortConfirmation() {
+    // Power y el botón cerrado no siempre se actualizan juntos. Releer el nodo
+    // actual, sin conservar el anterior ni tomar su ausencia como confirmación.
+    // Usar el plazo GLOBAL restante, no un corte adicional a los ocho segundos.
+    const confirmed = await waitForValue(() => {
+      const trigger = effort();
+      const input = editor();
+      if (enabled(input) && normalize(textOf(input)) && !matchesPrompt(input)) {
+        throw new Error('Hay un borrador distinto. Lo he conservado.');
+      }
+      const label = effortLabel(trigger);
+      const value = trigger?.getAttribute('data-selected-reasoning-effort');
+      const open = trigger?.getAttribute('aria-expanded') === 'true' || menuScopes().length > 0;
+      const target = isExtraHigh();
+      const usable = Boolean(trigger && enabled(trigger));
+      // Diagnóstico categórico: no guardar HTML, IDs ni etiquetas arbitrarias.
+      const labelState = !label ? 'ausente' : targetLabel(label) ? 'Extra High' :
+        levelNames(label).length ? 'otro nivel' : 'no reconocida';
+      const valueState = !value ? 'ausente' :
+        ['max', 'xhigh', 'extra_high'].includes(value) ? value : 'otro';
+      const summary = 'selector=' + (trigger ? 'presente' : 'ausente') +
+        '; control=' + (usable ? 'habilitado' : 'no interactuable') +
+        '; etiqueta=' + labelState + '; atributo=' + valueState +
+        '; menú=' + (open ? 'abierto' : 'cerrado') + '; Extra High=' + target;
+      if (summary !== lastEffortConfirmation) {
+        lastEffortConfirmation = summary;
+        record('Confirmación del selector: ' + summary);
+      }
+      // La identidad del botón reinicia la ventana cuando React lo reemplaza.
+      // La comprobación conjunta de texto/nivel/Enviar sigue haciéndose después.
+      return usable && target && !open ? trigger : null;
+    }, TIMEOUT_MS, READY_STABLE_MS);
+    if (confirmed) return confirmed;
+    throw new Error('El botón no confirma Extra High después de cerrar Power. ' +
+      'Agotado el plazo global; no se ha enviado. Último estado: ' + lastEffortConfirmation);
+  }
+
   async function selectExtraHigh() {
     // No abrir de nuevo un selector ya confirmado y cerrado.
     if (isExtraHigh() && effort()?.getAttribute('aria-expanded') !== 'true') return;
@@ -801,7 +841,7 @@
       // el estado definitivo del botón, fuera del menú modal de Radix.
       await closeEffortMenu(effort() || trigger);
     }
-    await waitFor(isExtraHigh, 'El botón no confirma Extra High después de cerrar Power.', MENU_TIMEOUT_MS, READY_STABLE_MS);
+    await waitForEffortConfirmation();
   }
 
   async function fillPrompt(node) {
