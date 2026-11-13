@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT - ?q= + Extra High + autoenviar
 // @namespace    chatgpt.extra-high-autosend
-// @version      1.3.13
+// @version      1.3.14
 // @description  ?q= y ?prompt=: detecta el editor data-composer-markdown, selecciona Extra High y envía una vez.
 // @homepageURL  https://github.com/alexx-ftw/chatgpt-extra-high-autosend
 // @supportURL   https://github.com/alexx-ftw/chatgpt-extra-high-autosend/issues
@@ -27,7 +27,7 @@
   if (window.top !== window.self || url.pathname !== '/' ||
       !prompt?.trim() || prompt.trim() === '%s') return;
 
-  const VERSION = '1.3.13';
+  const VERSION = '1.3.14';
   const RUN_KEY = '__chatgptQExtraHighV1__';
   const previousRun = window[RUN_KEY];
   if (!previousRun) window[RUN_KEY] = VERSION;
@@ -56,6 +56,12 @@
     '[data-composer-editor-host] [role="textbox"][contenteditable="true"]',
     '[data-composer-editor-host] [role="textbox"][contenteditable="plaintext-only"]'
   ].map(selector => form + ' ' + selector)).join(', ');
+  const EDITABLE_FIELDS = 'textarea, [contenteditable="true"], [contenteditable="plaintext-only"]';
+  const COMPOSER_CONTAINERS = '[data-type="unified-composer"], [data-chatgpt-composer], ' +
+    '[data-mobile-composer], [data-composer-surface], [data-composer-body]';
+  const EXCLUDED_EDITOR_CONTEXT = 'dialog, [role="dialog"], [role="search"], [role="searchbox"], ' +
+    '[data-message-author-role], [data-message-role], [data-user-message-bubble], ' +
+    '[data-composer-transition-slot="leading"], [data-composer-transition-slot="trailing"], #' + STATUS_ID;
   const EFFORT = 'button[data-composer-navigation-target="reasoning"], ' +
     'button[data-codex-intelligence-trigger="true"][data-selected-reasoning-effort]';
   const SEND = 'button[data-testid="send-button"], button[data-testid="composer-send-button"], ' +
@@ -127,8 +133,56 @@
       predicate(node) && !node.readOnly && !node.hasAttribute('readonly') &&
       node.getAttribute('aria-readonly') !== 'true' && !node.matches(':disabled') &&
       !node.closest('dialog, [role="dialog"], [role="search"], [data-composer-transition-slot="leading"], [data-composer-transition-slot="trailing"]'));
-    return fallback.length === 1 ? fallback : [];
+    if (fallback.length) return fallback.length === 1 ? fallback : [];
+    return structuralEditorCandidates(predicate);
   }
+  function composerScope(input) {
+    return input?.closest('form') || input?.closest('[data-composer-body]') ||
+      input?.closest(COMPOSER_CONTAINERS);
+  }
+
+  function structuralEditorState(input, predicate = visible) {
+    // Último respaldo: no aceptar un editable solo porque sea el único de la página.
+    if (!predicate(input)) return 'no visible';
+    if (input.closest(EXCLUDED_EDITOR_CONTEXT)) return 'contexto excluido';
+    if (input.readOnly || input.hasAttribute('readonly') || input.getAttribute('aria-readonly') === 'true') return 'solo lectura';
+    if (input.matches(':disabled') || input.getAttribute('aria-disabled') === 'true') return 'deshabilitado';
+    const root = composerScope(input);
+    if (!root || root.matches?.('body, main, [role="main"]')) return 'sin contenedor local';
+    const chatLabel = /^(?:chat with chatgpt|message chatgpt|chat con chatgpt)$/i.test(normalize(input.getAttribute('aria-label')));
+    const identified = input.getAttribute('name') === 'prompt-textarea' ||
+      input.hasAttribute('data-mobile-composer-prompt') || chatLabel || root.matches?.(COMPOSER_CONTAINERS);
+    if (!identified) return 'sin marca de chat';
+    const fields = [...root.querySelectorAll(EDITABLE_FIELDS)].filter(predicate);
+    if (fields.length !== 1 || fields[0] !== input) return 'editables ambiguos';
+    const sends = sendCandidates(input, true).filter(button =>
+      button.closest('form') === input.closest('form'));
+    if (sends.length !== 1) return sends.length ? 'envío ambiguo' : 'sin envío asociado';
+    return 'aceptado';
+  }
+
+  function structuralEditorCandidates(predicate = visible) {
+    const candidates = [...document.querySelectorAll(EDITABLE_FIELDS)].filter(input =>
+      structuralEditorState(input, predicate) === 'aceptado');
+    return candidates.length === 1 ? candidates : [];
+  }
+
+  function editableStructure() {
+    // Resumen acotado y categórico. Nunca copiar valores, IDs, clases o etiquetas libres.
+    const fields = [...document.querySelectorAll(EDITABLE_FIELDS)].filter(input =>
+      visible(input) && !input.closest('#' + STATUS_ID));
+    return fields.slice(0, 3).map(input => {
+      const tag = ['TEXTAREA', 'DIV'].includes(input.tagName) ? input.tagName.toLowerCase() : 'otro';
+      const role = input.getAttribute('role');
+      const mode = input.getAttribute('contenteditable');
+      const root = composerScope(input);
+      const scope = !root ? 'ninguno' : root.matches?.(COMPOSER_CONTAINERS) ? 'compositor' : 'formulario';
+      return tag + '[rol=' + (['textbox', 'searchbox'].includes(role) ? role : role ? 'otro' : 'ausente') +
+        '; edición=' + (['true', 'plaintext-only'].includes(mode) ? mode : 'nativa/otra') +
+        '; contenedor=' + scope + '; motivo=' + structuralEditorState(input) + ']';
+    }).join(' | ') + (fields.length > 3 ? ' | adicionales=' + (fields.length - 3) : '') || '(ninguna)';
+  }
+
   const editor = () => editorCandidates()[0];
   const effort = () => {
     const exact = [...document.querySelectorAll(EFFORT)].find(painted);
@@ -196,8 +250,8 @@
     return ['xhigh', 'extra_high'].includes(value);
   }
 
-  function sendCandidates(input) {
-    const root = input?.closest('form') || input?.closest('[data-composer-body]');
+  function sendCandidates(input, namedOnly = false) {
+    const root = composerScope(input);
     if (!root) return [];
     const negative = node => node.hasAttribute('data-stop-generating') ||
       /\b(?:stop|detener|parar|dictate|dictar|voice|voz|record|grabar|upload|adjuntar)\b/i.test(node.getAttribute('aria-label') || '');
@@ -207,7 +261,7 @@
         node.hasAttribute('data-composer-submit') || node.getAttribute('data-composer-navigation-target') === 'send' ||
         /^(?:send(?: message| prompt)?|enviar(?: mensaje)?)(?:\s*\((?:ctrl|control|cmd|command|shift|alt|⌘|enter|return|intro)[^)]*\))?$/i.test(normalize(node.getAttribute('aria-label')));
     });
-    if (named.length) return named;
+    if (named.length || namedOnly) return named;
     // Respaldo conservador: solo submit SIN etiqueta en el compositor identificado.
     // Nunca pulsar el primer submit global ni usar Enter en un editor desconocido.
     if (!root.hasAttribute?.('data-chatgpt-composer')) return [];
@@ -255,6 +309,7 @@
       '; principales visibles=' + known.filter(visible).length +
       '; alternativos visibles=' + (alternatives ? alternatives.filter(visible).length : 'no evaluados') +
       '; editables visibles=' + countVisible('textarea, [contenteditable="true"], [contenteditable="plaintext-only"]') +
+      '; estructura editable=' + (known.some(painted) ? 'principal reconocido' : editableStructure()) +
       '; marcos=' + document.querySelectorAll('iframe').length +
       '; controles de acceso visibles=' + countVisible('[data-testid="login-button"], [data-login-button], a[href^="/auth/login"], a[href^="https://chatgpt.com/auth/login"]');
     return summary;
@@ -384,7 +439,8 @@
         event.target?.closest?.('#' + STATUS_ID)) return;
     // No bloquear el texto. Escape cancela en cualquier sitio; las acciones
     // de edición cancelan únicamente si ocurren dentro del compositor.
-    const editing = event.target?.closest?.(EDITOR + ', ' + FALLBACK_EDITOR);
+    const editing = event.target?.closest?.(EDITOR + ', ' + FALLBACK_EDITOR) ||
+      structuralEditorCandidates().find(input => input === event.target || input.contains?.(event.target));
     if (event.type === 'keydown' && event.key === 'Escape') {
       cancelled = 'Cancelado con Escape.';
     } else if (editing && event.type !== 'pointerdown' &&
@@ -475,7 +531,7 @@
           attributeFilter: ['class', 'style', 'hidden', 'inert', 'disabled',
             'contenteditable', 'aria-disabled', 'aria-hidden', 'aria-expanded',
             'aria-valuenow', 'aria-valuetext', 'data-state', 'data-disabled',
-            'aria-label', 'type', 'data-testid', 'data-composer-submit',
+            'aria-label', 'type', 'name', 'id', 'role', 'data-testid', 'data-composer-submit',
             'data-selected-reasoning-effort']
         });
       } catch {

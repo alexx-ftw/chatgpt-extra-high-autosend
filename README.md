@@ -2,7 +2,7 @@
 
 Userscript para abrir ChatGPT con texto en la URL, seleccionar **Extra High** y solicitar el envío una sola vez.
 
-**Versión: 1.3.13.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
+**Versión: 1.3.14.** Proyecto no oficial, no afiliado a OpenAI. El panel solo aparece ante errores, fallos o advertencias. Conserva las correcciones de URL, el ajuste de Extra High, el envío único y las actualizaciones automáticas.
 
 ## Instalación
 
@@ -105,6 +105,16 @@ Desde la versión 1.3.13, la confirmación posterior al cierre del menú no venc
 El botón se vuelve a localizar en cada comprobación: debe estar habilitado, confirmar Extra High y tener el menú cerrado. Si se sustituye durante el renderizado, la estabilidad se comprueba de nuevo sobre el nodo actual. La lectura previa de Extra High en el deslizador no sustituye a esta validación ni a la comprobación conjunta inmediatamente anterior al único clic en Enviar.
 
 La desaparición o un estado intermedio del selector no provoca reaperturas ni clics adicionales. Escape, una consulta distinta, navegación o un borrador diferente cancelan la espera. Una ejecución que ya se haya detenido no se reactiva porque el selector reaparezca después. El diagnóstico conserva **Confirmación del selector** con el último estado categórico observado.
+
+## Respaldo estructural de editores (1.3.14)
+
+Los selectores de las interfaces clásica y nueva mantienen su prioridad. Solo cuando no reconocen ningún editor, el script busca un respaldo estructural. Admite, por ejemplo, un campo `name="prompt-textarea"` o `aria-label="Chat with ChatGPT"` en un formulario sin las marcas habituales, y campos dentro de contenedores conocidos del compositor que no sean un elemento `form`.
+
+Este respaldo exige identidad de chat, un contenedor local, un único campo visible y un único botón Enviar identificado dentro de ese contenedor. No utiliza un editable por ser el único de la página. Descarta diálogos, buscadores, contenido de mensajes, campos de solo lectura, controles ocultos y casos ambiguos. La comprobación de Extra High y el único clic siguen siendo obligatorios; no hay recargas ni reintentos añadidos.
+
+El diagnóstico de arranque añade `estructura editable`: tipo de elemento, rol categórico, modo de edición, tipo de contenedor y motivo de rechazo. No incluye el texto del campo, sus atributos libres, IDs, clases, HTML ni la dirección completa. El estado al detenerse conserva ese resumen, separado de la lectura actual. El resumen está limitado a tres elementos y el recuento adicional.
+
+La coincidencia `editables visibles=1` con `compositores=0` no permite identificar por sí sola la estructura de una pestaña. Se ha probado el respaldo con páginas sintéticas, no con una reproducción autenticada de ese fallo. Si la interfaz carece de las marcas y controles necesarios, el script sigue deteniéndose sin escribir en un campo arbitrario.
 
 ## Diagnóstico
 

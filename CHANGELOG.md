@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.14 - 2026-11-13
+
+- Añade un respaldo estructural para un campo del chat en un formulario sin marcas o en un contenedor conocido sin `form`.
+- Conserva los selectores existentes y su prioridad. La selección del esfuerzo y su confirmación no cambian.
+- Exige un único editable, identidad de chat y un único botón Enviar asociado; rechaza contextos ajenos y ambiguos.
+- Conserva cancelación manual, protección del borrador, Extra High, envío único y avisos solo ante problemas.
+- Añade un resumen categórico de los campos no reconocidos, sin texto, HTML, IDs ni atributos libres.
+- Mantiene autoupdate y el contenido de Always Classic sin cambios.
+- El respaldo y la regresión de ambas interfaces se prueban en páginas sintéticas; la estructura de la pestaña del diagnóstico sigue sin confirmarse.
+
 ## 1.3.13 - 2026-11-11
 
 - La confirmación tras cerrar Power usa el plazo global restante en vez de cortar a los 8 segundos.
